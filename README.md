@@ -15,41 +15,45 @@ KitchenSync tackles this problem by giving users better visibility into their ki
 
 ---
 
-## 💡 Solution Overview
-KitchenSync helps users:
-- Track what’s in their kitchen (organized by fridge, freezer, pantry, spices)  
-- Monitor expiration dates and get alerts  
-- Scan barcodes or receipts for quick entry  
-- Get recipe recommendations based on what they already own  
-- Plan meals ahead to reduce waste  
+## 🗂️ App Overview
+KitchenSync organizes the kitchen into intuitive sections, making it easier to manage what you own:
+- **Fridge** – perishable items that expire quickly  
+- **Freezer** – longer-term frozen goods  
+- **Pantry** – shelf-stable items  
+- **Spice Rack** – herbs and spices that don’t expire quickly but help with recipes  
 
-We’ll build this step by step:
-1. **MVP** – manual entry + barcode scanning  
-2. **Smart management** – expirations + simple recipe matching  
-3. **Stretch features** – receipt OCR, advanced recommendations, meal planning tools  
+Within each section, users will be able to add, track, and manage their food. The app connects these sections to features like expiration alerts and recipe recommendations.
 
 ---
 
 ## 🚀 Key Features
-- **Barcode scanning** (via OpenFoodFacts API)  
-- **Receipt scanning** (OCR → groceries auto-added)  
-- **Expiration tracking** (dates, defaults, alerts)  
-- **Recipe suggestions** (using Food.com dataset)  
-- **Meal planning & favorites** (optional add-on)  
+- **📷 Barcode Scanning** – Quickly add products by scanning UPC codes (via OpenFoodFacts).  
+- **🧾 Receipt Scanning** – Upload receipts to auto-add purchased items.  
+- **⏰ Expiration Tracking** – Monitor food lifespans and receive timely alerts.  
+- **🍳 Recipe Recommendations** – Suggest meals based on what’s already in the kitchen (via Food.com dataset).  
+- **📝 Meal Planning & Favorites** – Browse, save, and plan recipes to reduce waste.  
 
 ---
 
-## 📊 Data Sources (Proposed)
-- **[OpenFoodFacts](https://openfoodfacts.github.io/openfoodfacts-server/api/)** – product metadata from barcodes  
-- **[Food.com Recipes & Reviews](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews)** – large recipe dataset  
+## 💡 Solution Approach
+We’ll build KitchenSync in clear phases:
+1. **MVP** – Manual entry + barcode scanning.  
+2. **Smart Management** – Expiration tracking and simple recipe matching.  
+3. **Advanced Features** – Receipt OCR, enhanced recommendations, and meal planning.  
+
+---
+
+## 📊 Data Sources
+- **[OpenFoodFacts](https://openfoodfacts.github.io/openfoodfacts-server/api/)** – product metadata from barcodes.  
+- **[Food.com Recipes & Reviews](https://www.kaggle.com/datasets/irkaal/foodcom-recipes-and-reviews)** – large recipe dataset.  
 
 ---
 
 ## ⚖️ Ethical & Legal Considerations
-- **Privacy**: handle user data (receipts, inventory) securely  
-- **Licensing**: ensure compliance with open data licenses  
-- **Food safety**: alerts are guidance, not guarantees  
-- **Transparency**: keep curated vs. generated content clear  
+- **Privacy**: user data (receipts, kitchen items) must be handled securely.  
+- **Licensing**: compliance with open data licenses.  
+- **Food Safety**: expiration alerts should be framed as guidance, not guarantees.  
+- **Transparency**: curated vs. generated content must be clearly communicated.  
 
 ---
 
