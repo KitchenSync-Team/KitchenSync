@@ -65,8 +65,8 @@ We’ll build KitchenSync in clear phases:
 
 ---
 
-## 👥 Team
-University of Cincinnati – Senior Design Team  
+## 👥 KitchenSync Team
+University of Cincinnati – Senior Design Team 21
 - Drake Damron  
 - Jason Welsh  
 - Prashansa Dhakal  
