@@ -92,7 +92,7 @@ KitchenSync is where **convenience meets sustainability.**
 ---
 
 ## 👥 Team  
-University of Cincinnati – Senior Design Team  
+University of Cincinnati – Senior Design Team 21
 - Drake Damron  
 - Jason Welsh  
 - Prashansa Dhakal  
