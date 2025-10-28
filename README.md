@@ -1,106 +1,100 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 >Next.js and Supabase Starter Kit</h1>
-</a>
+# KitchenSync
 
-<p >
- The fastest way to build apps with Next.js and Supabase
-</p>
+KitchenSync is a capstone project focused on helping households reduce food waste, organize pantry inventory, and plan meals more efficiently. Users can scan receipts or barcodes, track expiration dates, receive reminders, and get personalized recipe suggestions based on dietary preferences captured during onboarding.
 
-<p >
-  <a ><strong>Features</strong></a> ·
-  <a ><strong>Demo</strong></a> ·
-  <a ><strong>Deploy to Vercel</strong></a> ·
-  <a ><strong>Clone and run locally</strong></a> ·
-  <a ><strong>Feedback and issues</strong></a>
-  <a ><strong>More Examples</strong></a>
-</p>
-<br/>
+- **Domain:** https://kitchen-sync.org
+- **Timeline:** Two-semester build (MVP by end of Fall semester, full rollout by Spring)
+- **Deployment:** Next.js (App Router) on Vercel with Supabase for backend services
 
-## Features
+The original Next.js + Supabase starter documentation is archived in [`docs/reference/nextjs-supabase-starter.md`](docs/reference/nextjs-supabase-starter.md) for quick reference.
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Middleware
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
+## Tech Stack
 
-## Demo
+**Frontend**
+- Next.js (React 18+, App Router) with TailwindCSS.
+- Mix of Server Components for data fetching and Client Components for interactivity.
+- Server Actions and Route Handlers for secure server-side logic.
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+**Backend & Data**
+- Supabase (PostgreSQL) for the relational database, auth, and storage.
+- Supabase Auth for session management with Row-Level Security (RLS) so users only access their own data.
+- Supabase Storage for receipt/barcode images with signed URL access control.
 
-## Deploy to Vercel
+**Hosting & Tooling**
+- Hosted on Vercel; every push to `main` triggers an automated build.
+- Environment variables managed in Vercel and mirrored locally via `.env.local`.
+- GitHub repo: `KitchenSync-Team/KitchenSync` (connected to Vercel + Supabase).
 
-Vercel deployment will guide you through creating a Supabase account and project.
+**AI / OCR (Planned)**
+- Integrate OpenAI Vision models for receipt and barcode OCR.
+- Parsed data will auto-populate the user’s pantry inventory.
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+## Why It Matters
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+Households routinely forget what they already own, let groceries expire, and struggle to build meals around on-hand ingredients. KitchenSync tackles food waste by giving users a clear view of their kitchen, nudging them about expiring items, and suggesting smarter ways to use what they have before it goes bad. Sustainability, usability, and practical value are the guiding principles behind every feature.
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+## Kitchen Zones
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+Inventory is organized into four intuitive sections to match real-world storage patterns:
 
-## Clone and run locally
+- **Fridge** — fast-moving perishables.
+- **Freezer** — long-term frozen goods.
+- **Pantry** — shelf-stable staples.
+- **Spice Rack** — seasonings and long-lasting flavor essentials.
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+These zones power tailored reminders, recommendations, and future analytics.
 
-2. Create a Next.js app using the Supabase Starter template npx command
+## Core MVP Features
 
-   ```bash
-   npx create-next-app --example with-supabase with-supabase-app
-   ```
+- **Auth & Profiles:** Supabase-powered registration, login, and user profiles.
+- **Inventory Management:** Manual entry or scanning into sections (fridge, freezer, pantry, spices).
+- **Expiration Tracking:** Alerts at five days remaining and on expiration.
+- **Notification System:** Supabase cron/edge functions for scheduled reminders.
+- **Preferences Quiz:** Optional onboarding to tailor recipes and suggestions.
+- **Responsive UI:** Desktop/mobile-friendly layouts using TailwindCSS.
 
-   ```bash
-   yarn create next-app --example with-supabase with-supabase-app
-   ```
+## Stretch Goals (Phase 2)
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
+- AI-powered OCR for automated receipt/barcode ingestion.
+- Recipe engine that cross-references preferences and inventory.
+- Social features for sharing recipes or following creators.
+- Mobile companion app (React Native or PWA exploration).
 
-3. Use `cd` to change into the app's directory
+## Team
 
-   ```bash
-   cd with-supabase-app
-   ```
+University of Cincinnati — Senior Design Team 14 (2025–2026)
 
-4. Rename `.env.example` to `.env.local` and update the following:
+| Member | Focus Area | Current Priorities |
+| --- | --- | --- |
+| Brendan Swartz | Project coordination & documentation | Organize team materials, drive README/docs updates, coordinate faculty touchpoints |
+| Prashansa Dhakal | Database research & development | Finalize Supabase schema (items, expirations, profiles), plan migrations/seed scripts |
+| Somyani Ghimire | UI/UX design | Wireframe scanning, inventory, alerts, and preferences experiences |
+| Drake Damron | Backend & integrations | Evaluate OCR/product APIs (OpenFoodFacts, OpenAI Vision), prototype ingestion pipeline |
+| Adama Ba | Platform engineering (TBD) | Support auth flows, notifications, recipe dataset integration as scope solidifies |
 
-  ```env
-  NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-  NEXT_PUBLIC_SUPABASE_ANON_KEY=[INSERT SUPABASE PROJECT API ANON OR PUBLISHABLE KEY]
-  ```
-  > [!NOTE]
-  > This example reads `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which maps to Supabase's anon (or new publishable) client key.
-  > You can supply the newer **publishable** key value here as well; Supabase treats it the same as the anon key for client usage. See the [full announcement](https://github.com/orgs/supabase/discussions/29260) for more information.
+## Development Workflow
 
-  Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+- Two-week sprint cadence tracked through GitHub Projects with milestones leading to March 2026.
+- Tasks live as GitHub Issues labeled by component (`frontend`, `backend`, `database`, `automation`, `docs`, etc.).
+- Developers use forks or feature branches and open PRs against `main`; Vercel deploys previews for review.
+- Environments (local, preview, production) stay aligned via Vercel-managed environment variables.
 
-5. You can now run the Next.js local development server:
+## Current Status
 
-   ```bash
-   npm run dev
-   ```
+- ✅ Domain verified (`kitchen-sync.org`) and routed through Vercel.
+- ✅ Next.js + Supabase starter deployed with authentication working end-to-end.
+- ✅ Supabase, Vercel, and GitHub org access granted to the full team.
+- 🚧 Transitioning from planning into schema design and page scaffolding (inventory, settings, preferences).
+- 🚧 Replacing starter UI copy and components with KitchenSync-branded experiences.
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+## Contributing & Planning
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+- Collaboration guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Roadmap & milestones: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- Starter kit reference: [`docs/reference/nextjs-supabase-starter.md`](docs/reference/nextjs-supabase-starter.md)
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+To get started locally:
 
-## Feedback and issues
-
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
-
-## More Supabase examples
-
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+1. Copy `.env.example` to `.env.local` and populate `NEXT_PUBLIC_SUPABASE_URL` plus the anon/publishable key (set it for both `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` so local and Vercel builds behave the same).
+2. Install dependencies with `npm install`.
+3. Run the dev server using `npm run dev`.

@@ -5,7 +5,8 @@ export default function DebugEnv() {
         <pre style={{whiteSpace:'pre-wrap', wordBreak:'break-all'}}>
       {JSON.stringify({
           NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0,8) + '…'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0,8) + '…',
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.slice(0,8) + '…'
       }, null, 2)}
     </pre>
     )
