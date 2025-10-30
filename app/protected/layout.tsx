@@ -1,27 +1,22 @@
-import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
-import { createClient } from "@/lib/supabase/server";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { resolveDashboardData } from "@/components/dashboard/resolve-dashboard-data";
 
-export default async function ProtectedLayout({
+import "@/app/protected/theme.css";
+
+export default async function DashboardLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/auth/login");
-  }
+  const cookieStore = await cookies();
+  const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
+  const dashboard = await resolveDashboardData();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lime-50 via-white to-emerald-50/30 dark:from-background dark:via-background dark:to-background">
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-8 sm:py-12">
-        {children}
-      </main>
-    </div>
+    <DashboardShell dashboard={dashboard} defaultOpen={defaultOpen}>
+      {children}
+    </DashboardShell>
   );
 }
