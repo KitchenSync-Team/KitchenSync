@@ -47,25 +47,25 @@ export function ForgotPasswordForm({
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       {success ? (
-        <Card>
+        <Card className="border-emerald-900/10 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-2xl">Check Your Email</CardTitle>
-            <CardDescription>Password reset instructions sent</CardDescription>
+            <CardTitle className="text-xl">Check your inbox</CardTitle>
+            <CardDescription>
+              Password reset instructions are on the way.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              If you registered using your email and password, you will receive
-              a password reset email.
+              If that email lives in KitchenSync, you&apos;ll receive a reset link in a few seconds. Follow it to choose a new password.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <Card className="border-emerald-900/10 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-2xl">Reset Your Password</CardTitle>
+            <CardTitle className="text-xl">Reset your password</CardTitle>
             <CardDescription>
-              Type in your email and we&apos;ll send you a link to reset your
-              password
+              Enter the email you use for KitchenSync and we&apos;ll handle the rest.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -82,16 +82,16 @@ export function ForgotPasswordForm({
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Sending..." : "Send reset email"}
+                  {isLoading ? "Sending…" : "Send reset email"}
                 </Button>
               </div>
               <div className="mt-4 text-center text-sm">
                 Already have an account?{" "}
                 <Link
                   href="/auth/login"
-                  className="underline underline-offset-4"
+                  className="font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-300"
                 >
                   Login
                 </Link>

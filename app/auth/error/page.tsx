@@ -1,36 +1,39 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function Page({
+type ErrorParams = {
+  error?: string;
+};
+
+export default function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ error: string }>;
+  searchParams?: ErrorParams;
 }) {
-  const params = await searchParams;
+  const errorMessage = searchParams?.error;
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Sorry, something went wrong.
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {params?.error ? (
-                <p className="text-sm text-muted-foreground">
-                  Code error: {params.error}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  An unspecified error occurred.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+    <div className="space-y-6 text-center">
+      <div className="space-y-2">
+        <h2 className="text-2xl font-semibold tracking-tight">We hit a snag</h2>
+        <p className="text-sm text-muted-foreground">
+          Let&apos;s get you back to KitchenSync.
+        </p>
       </div>
+      <Card className="border-emerald-900/10 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">Authentication error</CardTitle>
+          <CardDescription>
+            {errorMessage
+              ? `Message: ${errorMessage}`
+              : "Something unexpected happened while signing you in."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            You can try again, or head back to the login page to restart the process.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

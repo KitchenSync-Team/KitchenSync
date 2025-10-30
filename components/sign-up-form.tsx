@@ -21,6 +21,9 @@ export function SignUpForm({
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [sex, setSex] = useState("prefer_not_to_say");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +36,12 @@ export function SignUpForm({
     setIsLoading(true);
     setError(null);
 
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("Please provide both a first and last name");
+      setIsLoading(false);
+      return;
+    }
+
     if (password !== repeatPassword) {
       setError("Passwords do not match");
       setIsLoading(false);
@@ -44,6 +53,12 @@ export function SignUpForm({
         email,
         password,
         options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+            sex,
+          },
           emailRedirectTo: `${window.location.origin}/protected`,
         },
       });
@@ -58,14 +73,56 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
+      <Card className="border-emerald-900/10 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardTitle className="text-xl">Join KitchenSync</CardTitle>
+          <CardDescription>
+            We&apos;ll use this email to keep your kitchen in sync.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
+              <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="first-name">First name</Label>
+                  <Input
+                    id="first-name"
+                    type="text"
+                    placeholder="Jordan"
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="last-name">Last name</Label>
+                  <Input
+                    id="last-name"
+                    type="text"
+                    placeholder="Martinez"
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="sex">Sex / Gender</Label>
+                <select
+                  id="sex"
+                  name="sex"
+                  value={sex}
+                  onChange={(event) => setSex(event.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="non_binary">Non-binary</option>
+                  <option value="other">Another identity</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -101,14 +158,17 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+                {isLoading ? "Creating your account…" : "Sign up"}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
+              <Link
+                href="/auth/login"
+                className="font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-300"
+              >
                 Login
               </Link>
             </div>

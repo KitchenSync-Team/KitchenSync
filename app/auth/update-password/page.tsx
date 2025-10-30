@@ -2,10 +2,14 @@ import { UpdatePasswordForm } from "@/components/update-password-form";
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <UpdatePasswordForm />
+    <>
+      <div className="space-y-2 text-center">
+        <h2 className="text-2xl font-semibold tracking-tight">Choose a new password</h2>
+        <p className="text-sm text-muted-foreground">
+          Set a fresh password to keep your KitchenSync kitchen secure.
+        </p>
       </div>
-    </div>
+      <UpdatePasswordForm />
+    </>
   );
 }

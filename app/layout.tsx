@@ -9,8 +9,22 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: "KitchenSync",
+  description:
+    "KitchenSync keeps every kitchen in sync—from pantry inventory to expiring ingredients and grocery receipts.",
+  openGraph: {
+    title: "KitchenSync",
+    description:
+      "Stay ahead of food waste with real-time pantry tracking, reminders, and collaboration.",
+    url: defaultUrl,
+    siteName: "KitchenSync",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "KitchenSync",
+    description:
+      "Reduce food waste with KitchenSync's shared pantry manager and smart reminders.",
+  },
 };
 
 const geistSans = Geist({

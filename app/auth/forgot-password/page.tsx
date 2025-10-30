@@ -2,10 +2,14 @@ import { ForgotPasswordForm } from "@/components/forgot-password-form";
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <ForgotPasswordForm />
+    <>
+      <div className="space-y-2 text-center">
+        <h2 className="text-2xl font-semibold tracking-tight">Need a reset?</h2>
+        <p className="text-sm text-muted-foreground">
+          We&apos;ll send a secure link to update your KitchenSync password.
+        </p>
       </div>
-    </div>
+      <ForgotPasswordForm />
+    </>
   );
 }
