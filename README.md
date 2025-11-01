@@ -47,6 +47,14 @@ These guardrails ensure every account has sensible defaults before team members 
 - `docs/` – supplemental documentation and archival reference material
 - `public/` – static assets (icons, Open Graph images, etc.)
 
+## Component Organization & Naming
+
+- Keep feature-aware code in folders under `components/` (for example `dashboard/`, `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
+- File names stay lowercase dash-separated (or a single word) to mirror the component they expose, with non-visual helpers using `.ts` instead of `.tsx` when appropriate.
+- Shared UI primitives derived from shadcn/ui live in `components/ui/`; each file wraps the primitive, exports a PascalCase component, and re-exports helper variants as needed.
+- Dashboard layout pieces collect under `components/dashboard/ui/` so `DashboardShell` can compose sidebar/header widgets without deep cross-imports.
+- Interactive components that rely on client-side hooks include the `"use client"` directive at the top of the file for consistency.
+
 ## Getting Started
 
 1. **Prerequisites**
