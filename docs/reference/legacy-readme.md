@@ -7,7 +7,7 @@ Everyone should feel free to add, refine, or expand based on their area of focus
 ---
 
 ## 📌 Problem
-Food waste is expensive, unsustainable, and preventable. Many households:
+Food waste is expensive, unsustainable, and preventable. Many kitchens:
 - Forget what food they already have  
 - Let groceries expire before being used  
 - Struggle to plan meals around what’s on hand  
@@ -115,6 +115,6 @@ If time and resources allow:
 ---
 
 ## 🧭 Project Goals
-- Reduce household food waste through smarter tracking and planning.  
+- Reduce kitchen food waste through smarter tracking and planning.  
 - Leverage AI and automation responsibly to improve everyday sustainability.  
 - Deliver a functional, intuitive web application prototype by the end of the academic year.  

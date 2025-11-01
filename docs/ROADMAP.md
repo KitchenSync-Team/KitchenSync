@@ -15,7 +15,7 @@ This roadmap guides the two-semester capstone delivery. It aligns with the teamâ
 **Goals:** Working web experience where users can manage inventory, track expirations, and configure preferences.
 
 - Implement Supabase schema migrations with RLS policies and seed data scripts.
-- Build onboarding flow including Supabase Auth and preferences quiz.
+- Build onboarding flow including Supabase Auth, profile/personalization preferences, and storage setup guardrails.
 - Create inventory dashboards (fridge/freezer/pantry/spices) with CRUD and optional manual expiration tracking.
 - Wire up reminder system (5-day warning + expired alerts) with Supabase scheduling.
 - Replace landing page/tutorial copy with KitchenSync content and responsive layout.

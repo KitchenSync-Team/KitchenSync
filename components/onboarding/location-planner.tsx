@@ -1,14 +1,23 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  Apple,
+  ArchiveRestore,
   Boxes,
-  ChefHat,
-  CupSoda,
-  IceCream,
+  Carrot,
+  Drumstick,
+  Fish,
+  Home,
+  Milk,
+  Refrigerator,
+  ShoppingBasket,
   Snowflake,
+  Sprout,
+  Table,
   Utensils,
+  Warehouse,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,13 +31,36 @@ type IconChoice = {
   Icon: LucideIcon;
 };
 
-const DEFAULT_ICON_CHOICES: IconChoice[] = [
-  { value: "boxes", label: "Pantry shelves", Icon: Boxes },
-  { value: "snowflake", label: "Cold storage", Icon: Snowflake },
-  { value: "ice-cream", label: "Freezer goods", Icon: IceCream },
-  { value: "chef-hat", label: "Prep zone", Icon: ChefHat },
-  { value: "utensils", label: "Serving area", Icon: Utensils },
-  { value: "cup-soda", label: "Beverages", Icon: CupSoda },
+const STORAGE_ICON_CHOICES: IconChoice[] = [
+  { value: "boxes", label: "Pantry", Icon: Boxes },
+  { value: "archive-restore", label: "Cabinets", Icon: ArchiveRestore },
+  { value: "home", label: "Kitchen", Icon: Home },
+  { value: "refrigerator", label: "Fridge", Icon: Refrigerator },
+  { value: "snowflake", label: "Freezer", Icon: Snowflake },
+  { value: "table", label: "Counter", Icon: Table },
+  { value: "warehouse", label: "Garage", Icon: Warehouse },
+  { value: "shopping-basket", label: "Supplies", Icon: ShoppingBasket },
+  { value: "utensils", label: "Serveware", Icon: Utensils },
+];
+
+const FOOD_ICON_CHOICES: IconChoice[] = [
+  { value: "apple", label: "Fruits", Icon: Apple },
+  { value: "carrot", label: "Vegetables", Icon: Carrot },
+  { value: "milk", label: "Dairy", Icon: Milk },
+  { value: "drumstick", label: "Proteins", Icon: Drumstick },
+  { value: "fish", label: "Seafoods", Icon: Fish },
+  { value: "sprout", label: "Herbs", Icon: Sprout },
+];
+
+type IconSection = {
+  id: string;
+  label: string;
+  choices: IconChoice[];
+};
+
+const DEFAULT_ICON_SECTIONS: IconSection[] = [
+  { id: "storage", label: "Storage icons", choices: STORAGE_ICON_CHOICES },
+  { id: "food", label: "Food icons", choices: FOOD_ICON_CHOICES },
 ];
 
 type DefaultOption = {
@@ -53,7 +85,7 @@ type FinalLocation = {
 type LocationPlannerProps = {
   defaultOptions: DefaultOption[];
   initialCustomLocations?: CustomLocation[];
-  iconChoices?: IconChoice[];
+  iconSections?: IconSection[];
 };
 
 function getIconComponent(value: string | null | undefined, choices: IconChoice[]): LucideIcon {
@@ -68,8 +100,17 @@ function getIconLabel(value: string | null | undefined, choices: IconChoice[]): 
 export function LocationPlanner({
   defaultOptions,
   initialCustomLocations = [],
-  iconChoices = DEFAULT_ICON_CHOICES,
-}: LocationPlannerProps) {
+  iconSections = DEFAULT_ICON_SECTIONS,
+  onSelectionChange,
+}: LocationPlannerProps & {
+  onSelectionChange?: (summary: { total: number; defaults: number; customs: number }) => void;
+}) {
+  const allIconChoices = useMemo(
+    () => iconSections.flatMap((section) => section.choices),
+    [iconSections],
+  );
+  const defaultIcon = allIconChoices[0]?.value ?? "boxes";
+
   const defaultSelections = useMemo(
     () =>
       new Set(
@@ -84,7 +125,7 @@ export function LocationPlanner({
   const [customLocations, setCustomLocations] = useState<CustomLocation[]>(initialCustomLocations);
   const [isAdding, setIsAdding] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
-  const [newLocationIcon, setNewLocationIcon] = useState(iconChoices[0]?.value ?? "boxes");
+  const [newLocationIcon, setNewLocationIcon] = useState(defaultIcon);
   const [formError, setFormError] = useState<string | null>(null);
 
   const defaultOptionLookup = useMemo(
@@ -98,7 +139,7 @@ export function LocationPlanner({
       .map(
         (option): FinalLocation => ({
           name: option.value,
-          icon: option.icon ?? iconChoices[0]?.value ?? null,
+          icon: option.icon ?? defaultIcon,
           source: "default",
         }),
       );
@@ -106,23 +147,13 @@ export function LocationPlanner({
     const customs = customLocations.map(
       (location): FinalLocation => ({
         name: location.name,
-        icon: location.icon ?? iconChoices[0]?.value ?? null,
+        icon: location.icon ?? defaultIcon,
         source: "custom",
       }),
     );
 
-    if (defaults.length === 0 && customs.length === 0 && defaultOptions.length > 0) {
-      return [
-        {
-          name: defaultOptions[0].value,
-          icon: defaultOptions[0].icon ?? iconChoices[0]?.value ?? null,
-          source: "default",
-        },
-      ];
-    }
-
     return [...defaults, ...customs];
-  }, [customLocations, defaultOptions, iconChoices, selectedDefaults]);
+  }, [customLocations, defaultOptions, defaultIcon, selectedDefaults]);
 
   const toggleDefaultSelection = (value: string) => {
     setSelectedDefaults((previous) => {
@@ -145,14 +176,14 @@ export function LocationPlanner({
     setIsAdding(true);
     setFormError(null);
     setNewLocationName("");
-    setNewLocationIcon(iconChoices[0]?.value ?? "boxes");
+    setNewLocationIcon(defaultIcon);
   };
 
   const cancelAdd = () => {
     setIsAdding(false);
     setFormError(null);
     setNewLocationName("");
-    setNewLocationIcon(iconChoices[0]?.value ?? "boxes");
+    setNewLocationIcon(defaultIcon);
   };
 
   const handleAddCustom = () => {
@@ -180,12 +211,20 @@ export function LocationPlanner({
 
     setCustomLocations((previous) => [
       ...previous,
-      { id, name: trimmed, icon: newLocationIcon ?? iconChoices[0]?.value ?? "boxes" },
+      { id, name: trimmed, icon: newLocationIcon ?? defaultIcon },
     ]);
     setIsAdding(false);
     setNewLocationName("");
     setFormError(null);
   };
+
+  useEffect(() => {
+    onSelectionChange?.({
+      total: finalLocations.length,
+      defaults: finalLocations.filter((location) => location.source === "default").length,
+      customs: finalLocations.filter((location) => location.source === "custom").length,
+    });
+  }, [finalLocations, onSelectionChange]);
 
   return (
     <div className="space-y-6">
@@ -198,7 +237,7 @@ export function LocationPlanner({
 
         <div className="grid gap-2 sm:grid-cols-2">
           {defaultOptions.map((option) => {
-            const Icon = getIconComponent(option.icon, iconChoices);
+            const Icon = getIconComponent(option.icon, allIconChoices);
             const normalized = option.value.toLowerCase();
             const isChecked = selectedDefaults.has(normalized);
 
@@ -218,7 +257,7 @@ export function LocationPlanner({
                   onCheckedChange={() => toggleDefaultSelection(option.value)}
                 />
                 <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 aspect-square">
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <div className="flex flex-col">
@@ -237,11 +276,17 @@ export function LocationPlanner({
           <div>
             <p className="text-sm font-medium">Custom locations</p>
             <p className="text-xs text-muted-foreground">
-              Add unique zones like a spice rack, coffee bar, or baking corner.
+              Add unique zones like a coffee bar, appliance nook, or baking corner.
             </p>
           </div>
           {!isAdding ? (
-            <Button variant="outline" type="button" onClick={startAdd} size="sm">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={startAdd}
+              size="sm"
+              className="border-emerald-500 hover:bg-emerald-500/10 focus-visible:ring-emerald-500 dark:border-emerald-400 dark:hover:bg-emerald-500/20"
+            >
               Add location
             </Button>
           ) : null}
@@ -255,8 +300,8 @@ export function LocationPlanner({
 
         <div className="space-y-2">
           {customLocations.map((location) => {
-            const Icon = getIconComponent(location.icon, iconChoices);
-            const iconLabel = getIconLabel(location.icon, iconChoices);
+            const Icon = getIconComponent(location.icon, allIconChoices);
+            const iconLabel = getIconLabel(location.icon, allIconChoices);
 
             return (
               <div
@@ -264,7 +309,7 @@ export function LocationPlanner({
                 className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2 text-sm"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 aspect-square">
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <div className="flex flex-col">
@@ -277,6 +322,7 @@ export function LocationPlanner({
                   size="sm"
                   variant="ghost"
                   onClick={() => handleRemoveCustom(location.id)}
+                  className="hover:bg-red-500/10 focus-visible:ring-red-500 dark:hover:bg-red-500/20"
                 >
                   Remove
                 </Button>
@@ -303,35 +349,55 @@ export function LocationPlanner({
 
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase text-muted-foreground">Icon</p>
-                <div className="flex flex-wrap gap-2">
-                  {iconChoices.map((choice) => {
-                    const Icon = choice.Icon;
-                    const isSelected = newLocationIcon === choice.value;
-                    return (
-                      <button
-                        key={choice.value}
-                        type="button"
-                        onClick={() => setNewLocationIcon(choice.value)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium transition hover:border-emerald-500",
-                          isSelected && "border-emerald-500 bg-emerald-500/10 text-emerald-700",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" aria-hidden />
-                        {choice.label}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-col gap-3">
+                  {iconSections.map((section) => (
+                    <div key={section.id} className="space-y-2">
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        {section.label}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {section.choices.map((choice) => {
+                          const Icon = choice.Icon;
+                          const isSelected = newLocationIcon === choice.value;
+                          return (
+                            <button
+                              key={choice.value}
+                              type="button"
+                              onClick={() => setNewLocationIcon(choice.value)}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium transition hover:border-emerald-500",
+                                isSelected && "border-emerald-500 bg-emerald-500/10 text-emerald-700",
+                              )}
+                            >
+                              <Icon className="h-4 w-4" aria-hidden />
+                              {choice.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {formError ? <p className="text-xs text-destructive">{formError}</p> : null}
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={cancelAdd}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelAdd}
+                  className="hover:bg-emerald-500/10 focus-visible:ring-emerald-500 dark:hover:bg-emerald-500/20"
+                >
                   Cancel
                 </Button>
-                <Button type="button" size="sm" onClick={handleAddCustom}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddCustom}
+                  className="bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:ring-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                >
                   Add location
                 </Button>
               </div>

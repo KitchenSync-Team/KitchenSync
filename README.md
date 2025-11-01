@@ -1,15 +1,25 @@
 # KitchenSync
 
-KitchenSync helps households stay on top of pantry inventory, expirations, receipts, and shared kitchen activity. Authenticated users land in a protected dashboard that highlights what needs attention so ingredients get used before they go to waste.
+KitchenSync helps kitchens stay on top of pantry inventory, expirations, receipts, and shared cooking activity. Authenticated users land in a protected dashboard that highlights what needs attention so ingredients get used before they go to waste.
 
 The original Next.js + Supabase starter guide is preserved in [`docs/reference/nextjs-supabase-starter.md`](docs/reference/nextjs-supabase-starter.md) if you need it.
 
 ## Highlights
 
-- **Households & members** – each user belongs to a kitchen with locations, collaborators, and row-level access controls.
+- **Kitchens & members** – each user belongs to a kitchen with locations, collaborators, and row-level access controls.
 - **Inventory intelligence** – dashboard cards surface total items, upcoming expirations, active alerts, and recent receipts.
-- **Onboarding guardrails** – new users are routed through onboarding before they can access the dashboard.
+- **Onboarding guardrails** – new users confirm profile details, theme/units, communication preferences, and storage locations before seeing the dashboard.
 - **Supabase-first auth** – server components verify sessions and redirect unauthenticated visitors to the login flow.
+
+## Onboarding Journey
+
+When a new user signs in, KitchenSync guides them through three quick steps:
+
+1. **Introduce yourself** – confirm name/pronouns and choose preferences such as theme, measurement units, and whether to receive product updates or personalized tips.
+2. **Personalize KitchenSync** – flag any dietary styles and allergens so the experience can highlight relevant items.
+3. **Set up your kitchen** – name the kitchen and enable at least one storage location (Pantry, Fridge, Freezer, etc.) to unlock the dashboard.
+
+These guardrails ensure every account has sensible defaults before team members start collaborating.
 
 ## Tech Stack
 

@@ -164,6 +164,16 @@ export type ReceiptSummary = {
   source: Nullable<string>;
 };
 
+export type UserPreferencesSummary = {
+  dietaryPreferences: string[];
+  allergens: string[];
+  personalizationOptIn: boolean;
+  unitsSystem: "imperial" | "metric";
+  locale: string;
+  emailOptIn: boolean;
+  pushOptIn: boolean;
+};
+
 export type DashboardStats = {
   totalItems: number;
   totalUnits: number;
@@ -182,6 +192,7 @@ export type DashboardData = {
     members: KitchenMember[] | null;
     locations: LocationSummary[];
   };
+  preferences: UserPreferencesSummary;
   stats: DashboardStats;
   upcomingExpirations: ExpiringUnit[];
   activeAlerts: AlertSummary[];
@@ -189,6 +200,7 @@ export type DashboardData = {
 };
 
 const UPCOMING_WINDOW_DAYS = 7;
+const PERSONALIZATION_FALLBACK = true;
 
 function toDateString(date: Date) {
   return date.toISOString().split("T")[0] ?? "";
@@ -209,7 +221,9 @@ export async function fetchDashboardData(
         .maybeSingle(),
       supabase
         .from("user_preferences")
-        .select("default_kitchen_id")
+        .select(
+          "default_kitchen_id, dietary_preferences, allergens, personalization_opt_in, units_system, locale, email_opt_in, push_opt_in",
+        )
         .eq("user_id", userId)
         .maybeSingle(),
     ]);
@@ -225,6 +239,40 @@ export async function fetchDashboardData(
   if (preferencesError) {
     throw preferencesError;
   }
+
+  const dietaryPreferences = Array.isArray(preferences?.dietary_preferences)
+    ? (preferences?.dietary_preferences as unknown[])
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .map((value) => value.trim())
+    : [];
+
+  const allergens = Array.isArray(preferences?.allergens)
+    ? (preferences?.allergens as unknown[])
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .map((value) => value.trim())
+    : [];
+
+  const personalizationOptIn =
+    typeof preferences?.personalization_opt_in === "boolean"
+      ? preferences.personalization_opt_in
+      : PERSONALIZATION_FALLBACK;
+
+  const allowedUnits = new Set(["imperial", "metric"]);
+  const unitsSystem =
+    typeof preferences?.units_system === "string" && allowedUnits.has(preferences.units_system)
+      ? (preferences.units_system as "imperial" | "metric")
+      : "imperial";
+
+  const locale =
+    typeof preferences?.locale === "string" && preferences.locale.trim().length > 0
+      ? preferences.locale.trim()
+      : "en-US";
+
+  const emailOptIn =
+    typeof preferences?.email_opt_in === "boolean" ? preferences.email_opt_in : true;
+
+  const pushOptIn =
+    typeof preferences?.push_opt_in === "boolean" ? preferences.push_opt_in : false;
 
   let kitchenId = preferences?.default_kitchen_id ?? null;
 
@@ -425,19 +473,25 @@ export async function fetchDashboardData(
   let members: KitchenMember[] | null = null;
   let memberCount: number | null = null;
 
-  try {
-    const admin = createServiceRoleClient();
-    const { data: roster, error: rosterError } = await admin
-      .from("kitchen_members")
-      .select("user_id, role, joined_at")
-      .eq("kitchen_id", kitchenId)
-      .order("role", { ascending: true })
-      .order("joined_at", { ascending: true });
+  const admin = createServiceRoleClient();
+  const { data: roster, error: rosterError } = await admin
+    .from("kitchen_members")
+    .select("user_id, role, joined_at")
+    .eq("kitchen_id", kitchenId)
+    .order("role", { ascending: true })
+    .order("joined_at", { ascending: true });
 
-    if (rosterError) {
+  if (rosterError) {
+    const code = (rosterError as { code?: string }).code;
+    if (code && code !== "42P17") {
       throw rosterError;
     }
-
+    if (!code && !rosterError.message.includes("service role credentials")) {
+      throw rosterError;
+    }
+    members = null;
+    memberCount = null;
+  } else {
     const rosterData = (roster ?? []) as KitchenMemberRow[];
     const userIds = rosterData.map((entry) => entry.user_id);
     memberCount = userIds.length;
@@ -449,40 +503,34 @@ export async function fetchDashboardData(
         .in("id", userIds);
 
       if (profileError) {
-        throw profileError;
+        const profileCode = (profileError as { code?: string }).code;
+        if (profileCode && profileCode !== "42P17") {
+          throw profileError;
+        }
+        if (!profileCode && !profileError.message.includes("service role credentials")) {
+          throw profileError;
+        }
+        members = null;
+        memberCount = null;
+      } else {
+        const profileRowsData = (profileRows ?? []) as ProfileRow[];
+        const profileMap = new Map(
+          profileRowsData.map((row) => [row.id, row] as const),
+        );
+
+        members = rosterData.map((entry) => {
+          const profileRow = profileMap.get(entry.user_id ?? "");
+          return {
+            userId: entry.user_id,
+            role: entry.role,
+            joinedAt: entry.joined_at ?? null,
+            name: profileRow?.full_name ?? null,
+            email: profileRow?.email ?? null,
+          } satisfies KitchenMember;
+        });
       }
-
-      const profileRowsData = (profileRows ?? []) as ProfileRow[];
-      const profileMap = new Map(
-        profileRowsData.map((row) => [row.id, row] as const),
-      );
-
-      members = rosterData.map((entry) => {
-        const profileRow = profileMap.get(entry.user_id ?? "");
-        return {
-          userId: entry.user_id,
-          role: entry.role,
-          joinedAt: entry.joined_at ?? null,
-          name: profileRow?.full_name ?? null,
-          email: profileRow?.email ?? null,
-        } satisfies KitchenMember;
-      });
     } else {
       members = [];
-    }
-  } catch (rosterError) {
-    if (rosterError instanceof Error) {
-      const code = (rosterError as { code?: string }).code;
-      if (code && code !== "42P17") {
-        throw rosterError;
-      }
-      if (!code && !rosterError.message.includes("service role credentials")) {
-        throw rosterError;
-      }
-      members = null;
-      memberCount = null;
-    } else {
-      throw rosterError;
     }
   }
 
@@ -510,6 +558,15 @@ export async function fetchDashboardData(
       memberCount,
       members,
       locations: locationSummaries,
+    },
+    preferences: {
+      dietaryPreferences,
+      allergens,
+      personalizationOptIn,
+      unitsSystem,
+      locale,
+      emailOptIn,
+      pushOptIn,
     },
     stats: {
       totalItems: itemsCountResult.count ?? 0,

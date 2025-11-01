@@ -12,7 +12,7 @@ export default async function KitchenSettingsPage() {
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Kitchen Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your household kitchen details, members, and storage locations.
+          Manage your kitchen details, members, and storage locations.
         </p>
       </header>
 
