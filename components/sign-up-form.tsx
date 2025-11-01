@@ -23,7 +23,6 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [sex, setSex] = useState("prefer_not_to_say");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -57,12 +56,14 @@ export function SignUpForm({
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-            sex,
           },
           emailRedirectTo: `${window.location.origin}/protected`,
         },
       });
-      if (error) throw error;
+      if (error) {
+        setError(error.message);
+        return;
+      }
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -106,22 +107,6 @@ export function SignUpForm({
                     onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="sex">Sex / Gender</Label>
-                <select
-                  id="sex"
-                  name="sex"
-                  value={sex}
-                  onChange={(event) => setSex(event.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
-                  <option value="non_binary">Non-binary</option>
-                  <option value="other">Another identity</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                </select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>

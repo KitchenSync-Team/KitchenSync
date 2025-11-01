@@ -400,7 +400,7 @@ export function OnboardingForm({
   const themeValue = currentTheme ?? "system";
 
   return (
-    <form action={dispatchOnboarding} method="POST" onSubmit={handleFormSubmit} className="space-y-6">
+    <form action={dispatchOnboarding} onSubmit={handleFormSubmit} className="space-y-6">
       <input type="hidden" name="kitchenId" value={kitchenId} />
       <input type="hidden" name="firstName" value={firstName} />
       <input type="hidden" name="lastName" value={lastName} />
