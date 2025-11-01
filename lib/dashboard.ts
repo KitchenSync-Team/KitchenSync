@@ -167,6 +167,8 @@ export type ReceiptSummary = {
 export type UserPreferencesSummary = {
   dietaryPreferences: string[];
   allergens: string[];
+  cuisineLikes: string[];
+  cuisineDislikes: string[];
   personalizationOptIn: boolean;
   unitsSystem: "imperial" | "metric";
   locale: string;
@@ -222,7 +224,7 @@ export async function fetchDashboardData(
       supabase
         .from("user_preferences")
         .select(
-          "default_kitchen_id, dietary_preferences, allergens, personalization_opt_in, units_system, locale, email_opt_in, push_opt_in",
+          "default_kitchen_id, dietary_preferences, allergens, cuisine_likes, cuisine_dislikes, personalization_opt_in, units_system, locale, email_opt_in, push_opt_in",
         )
         .eq("user_id", userId)
         .maybeSingle(),
@@ -251,6 +253,26 @@ export async function fetchDashboardData(
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         .map((value) => value.trim())
     : [];
+  const cuisineLikes = Array.isArray(preferences?.cuisine_likes)
+    ? Array.from(
+        new Set(
+          (preferences?.cuisine_likes as unknown[])
+            .filter((value): value is string => typeof value === "string" && value.length > 0)
+            .map((value) => value.trim()),
+        ),
+      )
+    : [];
+  const rawCuisineDislikes = Array.isArray(preferences?.cuisine_dislikes)
+    ? Array.from(
+        new Set(
+          (preferences?.cuisine_dislikes as unknown[])
+            .filter((value): value is string => typeof value === "string" && value.length > 0)
+            .map((value) => value.trim()),
+        ),
+      )
+    : [];
+  const cuisineLikesSet = new Set(cuisineLikes);
+  const cuisineDislikes = rawCuisineDislikes.filter((value) => !cuisineLikesSet.has(value));
 
   const personalizationOptIn =
     typeof preferences?.personalization_opt_in === "boolean"
@@ -562,6 +584,8 @@ export async function fetchDashboardData(
     preferences: {
       dietaryPreferences,
       allergens,
+      cuisineLikes,
+      cuisineDislikes,
       personalizationOptIn,
       unitsSystem,
       locale,

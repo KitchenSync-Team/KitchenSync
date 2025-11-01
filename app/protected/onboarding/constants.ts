@@ -32,6 +32,25 @@ export const ALLERGEN_OPTIONS: readonly OnboardingOption[] = [
   { value: "sesame", label: "Sesame" },
 ] as const;
 
+export const CUISINE_PREFERENCE_OPTIONS: readonly OnboardingOption[] = [
+  { value: "american_comfort", label: "American comfort" },
+  { value: "bbq_smokehouse", label: "BBQ & smokehouse" },
+  { value: "caribbean", label: "Caribbean" },
+  { value: "chinese", label: "Chinese" },
+  { value: "french", label: "French" },
+  { value: "greek", label: "Greek" },
+  { value: "indian", label: "Indian" },
+  { value: "italian", label: "Italian" },
+  { value: "japanese", label: "Japanese" },
+  { value: "korean", label: "Korean" },
+  { value: "latin_american", label: "Latin American" },
+  { value: "mediterranean", label: "Mediterranean" },
+  { value: "mexican", label: "Mexican" },
+  { value: "middle_eastern", label: "Middle Eastern" },
+  { value: "thai", label: "Thai" },
+  { value: "vietnamese", label: "Vietnamese" },
+] as const;
+
 export const PERSONALIZATION_DEFAULT = true;
 
 export const LOCATION_REQUIRED_ERROR_MESSAGE =

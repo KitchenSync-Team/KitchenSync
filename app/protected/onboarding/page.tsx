@@ -116,6 +116,8 @@ export default async function OnboardingPage() {
   const initialPreferences = {
     dietaryPreferences: dashboard.preferences.dietaryPreferences,
     allergens: dashboard.preferences.allergens,
+    cuisineLikes: dashboard.preferences.cuisineLikes,
+    cuisineDislikes: dashboard.preferences.cuisineDislikes,
     personalizationOptIn: dashboard.preferences.personalizationOptIn,
     unitsSystem: dashboard.preferences.unitsSystem,
     locale: dashboard.preferences.locale,

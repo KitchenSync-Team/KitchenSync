@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   ALLERGEN_OPTIONS,
+  CUISINE_PREFERENCE_OPTIONS,
   DIETARY_OPTIONS,
   LOCATION_REQUIRED_ERROR_MESSAGE,
   PERSONALIZATION_DEFAULT,
@@ -89,6 +90,8 @@ type OnboardingFormProps = {
   initialPreferences: {
     dietaryPreferences: string[];
     allergens: string[];
+    cuisineLikes: string[];
+    cuisineDislikes: string[];
     personalizationOptIn: boolean | null;
     unitsSystem: string | null;
     locale: string | null;
@@ -210,6 +213,12 @@ export function OnboardingForm({
   const [allergenSelections, setAllergenSelections] = useState<Set<string>>(
     () => new Set(initialPreferences.allergens),
   );
+  const [cuisineLikeSelections, setCuisineLikeSelections] = useState<Set<string>>(
+    () => new Set(initialPreferences.cuisineLikes),
+  );
+  const [cuisineDislikeSelections, setCuisineDislikeSelections] = useState<Set<string>>(
+    () => new Set(initialPreferences.cuisineDislikes),
+  );
   const [personalizationOptIn, setPersonalizationOptIn] = useState(
     initialPreferences.personalizationOptIn ?? PERSONALIZATION_DEFAULT,
   );
@@ -294,6 +303,14 @@ export function OnboardingForm({
 
   const dietaryOptions = useMemo(() => Array.from(dietarySelections), [dietarySelections]);
   const allergenOptions = useMemo(() => Array.from(allergenSelections), [allergenSelections]);
+  const cuisineLikes = useMemo(
+    () => Array.from(cuisineLikeSelections),
+    [cuisineLikeSelections],
+  );
+  const cuisineDislikes = useMemo(
+    () => Array.from(cuisineDislikeSelections),
+    [cuisineDislikeSelections],
+  );
   const reorderColumnMajor = useCallback(<T extends { label: string; value: string }>(items: T[]) => {
     const mid = Math.ceil(items.length / 2);
     const columnOne = items.slice(0, mid);
@@ -319,6 +336,51 @@ export function OnboardingForm({
     const alphabetical = [...ALLERGEN_OPTIONS].sort((a, b) => a.label.localeCompare(b.label));
     return reorderColumnMajor(alphabetical);
   }, [reorderColumnMajor]);
+  const sortedCuisineOptions = useMemo(
+    () =>
+      [...CUISINE_PREFERENCE_OPTIONS].sort((a, b) =>
+        a.label.localeCompare(b.label),
+      ),
+    [],
+  );
+  const toggleCuisineLike = useCallback((value: string) => {
+    setCuisineLikeSelections((current) => {
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+    setCuisineDislikeSelections((current) => {
+      if (!current.has(value)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(value);
+      return next;
+    });
+  }, []);
+  const toggleCuisineDislike = useCallback((value: string) => {
+    setCuisineDislikeSelections((current) => {
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+    setCuisineLikeSelections((current) => {
+      if (!current.has(value)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(value);
+      return next;
+    });
+  }, []);
 
   const handleFormSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -358,6 +420,17 @@ export function OnboardingForm({
       ))}
       {allergenOptions.map((allergen) => (
         <input key={allergen} type="hidden" name="allergens" value={allergen} />
+      ))}
+      {cuisineLikes.map((like) => (
+        <input key={`cuisine-like-${like}`} type="hidden" name="cuisineLikes" value={like} />
+      ))}
+      {cuisineDislikes.map((dislike) => (
+        <input
+          key={`cuisine-dislike-${dislike}`}
+          type="hidden"
+          name="cuisineDislikes"
+          value={dislike}
+        />
       ))}
 
       <div className="flex flex-col gap-1">
@@ -565,6 +638,80 @@ export function OnboardingForm({
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Cuisine preferences</CardTitle>
+            <CardDescription>
+              Tell us which cuisines to lean into and which ones to keep off your plate.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Go-to cuisines</p>
+              <p className="text-xs text-muted-foreground">
+                We’ll spotlight recipes and ideas from these cuisines in your feed.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {sortedCuisineOptions.map((option) => {
+                  const isSelected = cuisineLikeSelections.has(option.value);
+                  return (
+                    <label
+                      key={`like-${option.value}`}
+                      className={cn(
+                        "cursor-pointer rounded-full border border-border bg-background px-4 py-1.5 text-sm font-medium shadow-xs transition focus-within:outline-none focus-within:ring-2 focus-within:ring-emerald-500/60 focus-within:ring-offset-2",
+                        "hover:border-emerald-500 hover:text-emerald-600",
+                        isSelected &&
+                          "border-emerald-500 bg-emerald-500/10 text-emerald-700 shadow-sm dark:text-emerald-200",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={isSelected}
+                        onChange={() => toggleCuisineLike(option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Skip these</p>
+              <p className="text-xs text-muted-foreground">
+                We’ll downplay dishes heavy on these cuisines so they don’t clutter suggestions.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {sortedCuisineOptions.map((option) => {
+                  const isSelected = cuisineDislikeSelections.has(option.value);
+                  return (
+                    <label
+                      key={`dislike-${option.value}`}
+                      className={cn(
+                        "cursor-pointer rounded-full border border-border bg-background px-4 py-1.5 text-sm font-medium shadow-xs transition focus-within:outline-none focus-within:ring-2 focus-within:ring-red-500/60 focus-within:ring-offset-2",
+                        "hover:border-red-500 hover:text-red-600",
+                        isSelected &&
+                          "border-red-500 bg-red-500/10 text-red-700 shadow-sm dark:text-red-200",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={isSelected}
+                        onChange={() => toggleCuisineDislike(option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Marking a cuisine as a favorite automatically removes it from the skip list to avoid conflicts.
+            </p>
           </CardContent>
         </Card>
 

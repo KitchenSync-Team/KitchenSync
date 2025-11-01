@@ -26,6 +26,8 @@ type ProfileSnapshot = {
 type PreferenceSnapshot = {
   dietaryPreferences: string[];
   allergens: string[];
+  cuisineLikes: string[];
+  cuisineDislikes: string[];
   personalizationOptIn: boolean | null;
   unitsSystem: string | null;
   locale: string | null;

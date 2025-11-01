@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import {
   ALLERGEN_OPTIONS,
+  CUISINE_PREFERENCE_OPTIONS,
   DIETARY_OPTIONS,
   LOCATION_REQUIRED_ERROR_MESSAGE,
   PERSONALIZATION_DEFAULT,
@@ -82,6 +83,29 @@ export async function completeOnboarding(
           .filter((value) => value.length > 0),
       ),
     ).filter((value) => allowedAllergenValues.has(value));
+    const allowedCuisineValues = new Set(
+      CUISINE_PREFERENCE_OPTIONS.map((option) => option.value),
+    );
+    const cuisineLikes = Array.from(
+      new Set(
+        formData
+          .getAll("cuisineLikes")
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0),
+      ),
+    ).filter((value) => allowedCuisineValues.has(value));
+    const cuisineDislikesRaw = Array.from(
+      new Set(
+        formData
+          .getAll("cuisineDislikes")
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0),
+      ),
+    ).filter((value) => allowedCuisineValues.has(value));
+    const cuisineLikesSet = new Set(cuisineLikes);
+    const cuisineDislikes = cuisineDislikesRaw.filter((value) => !cuisineLikesSet.has(value));
 
     const personalizeRaw = formData.get("personalizationOptIn");
     const personalizationOptIn =
@@ -181,6 +205,8 @@ export async function completeOnboarding(
           default_kitchen_id: kitchenId,
           dietary_preferences: dietaryPreferences.length > 0 ? dietaryPreferences : null,
           allergens: allergens.length > 0 ? allergens : null,
+          cuisine_likes: cuisineLikes.length > 0 ? cuisineLikes : null,
+          cuisine_dislikes: cuisineDislikes.length > 0 ? cuisineDislikes : null,
           personalization_opt_in: personalizationOptIn,
           units_system: unitsSystem,
           locale,
