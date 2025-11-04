@@ -293,8 +293,8 @@ export async function loadKitchenData(
   const emailOptIn =
     typeof preferences?.email_opt_in === "boolean" ? preferences.email_opt_in : true;
 
-  const pushOptIn =
-    typeof preferences?.push_opt_in === "boolean" ? preferences.push_opt_in : false;
+  // Push notifications are currently unused; default to false for display purposes.
+  const pushOptIn = false;
 
   let kitchenId = preferences?.default_kitchen_id ?? null;
 
