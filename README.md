@@ -35,12 +35,12 @@ These guardrails ensure every account has sensible defaults before team members 
   - `page.tsx` – marketing landing page
   - `auth/` – login, sign-up, password reset routes
   - `protected/`
-    - `layout.tsx` – guards auth, fetches dashboard data, wraps children in the dashboard shell
-    - `page.tsx` – main dashboard view
-    - `profile/`, `kitchen-settings/`, `settings/` – additional authenticated pages
-    - `theme.css` – Tailwind tokens specific to the dashboard UI
+    - `(app)/layout.tsx` – guards auth, wraps children in the shared sidebar skeleton
+    - `(app)/page.tsx` – main dashboard placeholder
+    - `(app)/profile`, `(app)/kitchen-settings`, `(app)/settings` – additional authenticated pages (placeholders)
+    - `onboarding/` – server-rendered onboarding flow
 - `components/`
-  - `dashboard/` – dashboard context, shell, and reusable UI pieces under `dashboard/ui`
+  - `app-sidebar.tsx` plus `nav-*.tsx` – shadcn sidebar block primitives
   - `ui/` – shared shadcn/ui wrappers (`button`, `card`, etc.)
   - Auth helpers and form components (`auth-button.tsx`, `login-form.tsx`, …)
 - `lib/` – Supabase client helpers, dashboard data loaders, domain utilities
@@ -49,10 +49,10 @@ These guardrails ensure every account has sensible defaults before team members 
 
 ## Component Organization & Naming
 
-- Keep feature-aware code in folders under `components/` (for example `dashboard/`, `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
+- Keep feature-aware code in folders under `components/` (for example `protected/`, `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
 - File names stay lowercase dash-separated (or a single word) to mirror the component they expose, with non-visual helpers using `.ts` instead of `.tsx` when appropriate.
 - Shared UI primitives derived from shadcn/ui live in `components/ui/`; each file wraps the primitive, exports a PascalCase component, and re-exports helper variants as needed.
-- Dashboard layout pieces collect under `components/dashboard/ui/` so `DashboardShell` can compose sidebar/header widgets without deep cross-imports.
+- Protected layout pieces collect under `components/protected/` so the shared shell, sidebar, and header stay in sync.
 - Interactive components that rely on client-side hooks include the `"use client"` directive at the top of the file for consistency.
 
 ## Getting Started
@@ -89,9 +89,9 @@ These guardrails ensure every account has sensible defaults before team members 
 
 ## Working in the Repo
 
-- Keep dashboard UI in `components/dashboard/ui` so it can be shared across protected routes.
+- Keep shared authenticated UI minimal in `components/app-sidebar.tsx` and the accompanying `nav-*` helpers; extend them as needed for your product surface.
 - Access Supabase via helpers in `lib/supabase` or domain utilities like `lib/dashboard.ts` to stay RLS-safe.
-- Tailwind tokens for the protected area are centralized in `app/protected/theme.css`.
+- Sidebar palette tokens live alongside the global Tailwind config in `app/globals.css`.
 - The marketing site and dashboard each have their own route groups under `app/`, but everything shares the global `layout.tsx`.
 
 ## Contributing
