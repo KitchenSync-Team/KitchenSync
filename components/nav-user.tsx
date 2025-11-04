@@ -129,10 +129,7 @@ export function NavUser({ user }: { user: NavUserData }) {
                 <Sun className="size-4 text-muted-foreground" />
                 Theme
               </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent
-                side={isMobile ? "top" : "right"}
-                align={isMobile ? "end" : "start"}
-              >
+              <DropdownMenuSubContent>
                 {mounted ? (
                   <DropdownMenuRadioGroup
                     value={theme}
