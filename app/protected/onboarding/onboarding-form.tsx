@@ -773,7 +773,7 @@ export function OnboardingForm({
           <CardHeader>
             <CardTitle>Kitchen details</CardTitle>
             <CardDescription>
-              It appears in the dashboard header and on invitations you send. You can always rename it later.
+              It appears in the kitchen navigation header and on invitations you send. You can always rename it
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">

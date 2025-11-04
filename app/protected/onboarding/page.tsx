@@ -2,9 +2,9 @@ import { redirect } from "next/navigation";
 
 import {
   MissingKitchenError,
-  fetchDashboardData,
+  loadKitchenData,
   type LocationSummary,
-} from "@/lib/dashboard";
+} from "@/lib/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
 import { OnboardingExperience } from "./onboarding-experience";
@@ -51,19 +51,19 @@ export default async function OnboardingPage() {
     redirect("/auth/login");
   }
 
-  let dashboard = null;
+  let kitchenData = null;
 
   try {
-    dashboard = await fetchDashboardData(supabase, user.id);
+    kitchenData = await loadKitchenData(supabase, user.id);
   } catch (err) {
     if (err instanceof MissingKitchenError) {
-      dashboard = null;
+      kitchenData = null;
     } else {
       throw err;
     }
   }
 
-  if (!dashboard) {
+  if (!kitchenData) {
     return (
       <section className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-16 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">We need a kitchen to continue</h1>
@@ -75,11 +75,11 @@ export default async function OnboardingPage() {
     );
   }
 
-  if (dashboard.user.onboardingComplete) {
+  if (kitchenData.user.onboardingComplete) {
     redirect("/protected");
   }
 
-  const kitchen = dashboard.kitchen;
+  const kitchen = kitchenData.kitchen;
   const realLocations = filterRealLocations(kitchen.locations);
   const normalizedExisting = new Map(
     realLocations.map((location) => [normalize(location.name), location] as const),
@@ -108,33 +108,33 @@ export default async function OnboardingPage() {
     }));
 
   const initialProfile = {
-    firstName: dashboard.user.firstName ?? "",
-    lastName: dashboard.user.lastName ?? "",
-    sex: dashboard.user.sex ?? "",
+    firstName: kitchenData.user.firstName ?? "",
+    lastName: kitchenData.user.lastName ?? "",
+    sex: kitchenData.user.sex ?? "",
   };
 
   const initialPreferences = {
-    dietaryPreferences: dashboard.preferences.dietaryPreferences,
-    allergens: dashboard.preferences.allergens,
-    cuisineLikes: dashboard.preferences.cuisineLikes,
-    cuisineDislikes: dashboard.preferences.cuisineDislikes,
-    personalizationOptIn: dashboard.preferences.personalizationOptIn,
-    unitsSystem: dashboard.preferences.unitsSystem,
-    locale: dashboard.preferences.locale,
-    emailOptIn: dashboard.preferences.emailOptIn,
-    pushOptIn: dashboard.preferences.pushOptIn,
+    dietaryPreferences: kitchenData.preferences.dietaryPreferences,
+    allergens: kitchenData.preferences.allergens,
+    cuisineLikes: kitchenData.preferences.cuisineLikes,
+    cuisineDislikes: kitchenData.preferences.cuisineDislikes,
+    personalizationOptIn: kitchenData.preferences.personalizationOptIn,
+    unitsSystem: kitchenData.preferences.unitsSystem,
+    locale: kitchenData.preferences.locale,
+    emailOptIn: kitchenData.preferences.emailOptIn,
+    pushOptIn: kitchenData.preferences.pushOptIn,
   };
 
   return (
     <OnboardingExperience
       kitchenId={kitchen.id}
       initialKitchenName={kitchen.name}
-      userDisplayName={dashboard.user.fullName ?? dashboard.user.firstName ?? null}
+      userDisplayName={kitchenData.user.fullName ?? kitchenData.user.firstName ?? null}
       defaultOptions={defaultOptions}
       initialCustomLocations={initialCustomLocations}
       initialProfile={initialProfile}
       initialPreferences={initialPreferences}
-      userNameForCard={dashboard.user.fullName ?? dashboard.user.firstName ?? null}
+      userNameForCard={kitchenData.user.fullName ?? kitchenData.user.firstName ?? null}
     />
   );
 }

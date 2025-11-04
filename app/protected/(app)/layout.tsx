@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { resolveDashboardData } from "@/app/protected/_lib/resolve-dashboard-data";
+import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default async function ProtectedAppLayout({
@@ -14,7 +14,7 @@ export default async function ProtectedAppLayout({
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
 
   // Ensure the user is authenticated and onboarded before rendering protected routes.
-  await resolveDashboardData();
+  await resolveKitchen();
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>

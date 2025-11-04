@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 
 import {
   MissingKitchenError,
-  fetchDashboardData,
-} from "@/lib/dashboard";
+  loadKitchenData,
+} from "@/lib/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
-export async function resolveDashboardData() {
+export async function resolveKitchen() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -18,7 +18,13 @@ export async function resolveDashboardData() {
   }
 
   try {
-    return await fetchDashboardData(supabase, user.id);
+    const kitchenSnapshot = await loadKitchenData(supabase, user.id);
+
+    if (!kitchenSnapshot.user.onboardingComplete) {
+      redirect("/protected/onboarding");
+    }
+
+    return kitchenSnapshot;
   } catch (err) {
     if (err instanceof MissingKitchenError) {
       redirect("/protected/onboarding");

@@ -176,7 +176,7 @@ export type UserPreferencesSummary = {
   pushOptIn: boolean;
 };
 
-export type DashboardStats = {
+export type KitchenMetrics = {
   totalItems: number;
   totalUnits: number;
   expiringSoon: number;
@@ -184,7 +184,7 @@ export type DashboardStats = {
   activeAlerts: number;
 };
 
-export type DashboardData = {
+export type KitchenSnapshot = {
   user: ProfileSummary;
   kitchen: {
     id: string;
@@ -195,7 +195,7 @@ export type DashboardData = {
     locations: LocationSummary[];
   };
   preferences: UserPreferencesSummary;
-  stats: DashboardStats;
+  stats: KitchenMetrics;
   upcomingExpirations: ExpiringUnit[];
   activeAlerts: AlertSummary[];
   recentReceipts: ReceiptSummary[];
@@ -208,10 +208,10 @@ function toDateString(date: Date) {
   return date.toISOString().split("T")[0] ?? "";
 }
 
-export async function fetchDashboardData(
+export async function loadKitchenData(
   supabase: SupabaseClient,
   userId: string,
-): Promise<DashboardData> {
+): Promise<KitchenSnapshot> {
   const [{ data: profile, error: profileError }, { data: preferences, error: preferencesError }] =
     await Promise.all([
       supabase

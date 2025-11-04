@@ -43,16 +43,16 @@ These guardrails ensure every account has sensible defaults before team members 
   - `app-sidebar.tsx` plus `nav-*.tsx` – shadcn sidebar block primitives
   - `ui/` – shared shadcn/ui wrappers (`button`, `card`, etc.)
   - Auth helpers and form components (`auth-button.tsx`, `login-form.tsx`, …)
-- `lib/` – Supabase client helpers, dashboard data loaders, domain utilities
+- `lib/` – Supabase client helpers, kitchen data loaders, domain utilities
 - `docs/` – supplemental documentation and archival reference material
 - `public/` – static assets (icons, Open Graph images, etc.)
 
 ## Component Organization & Naming
 
-- Keep feature-aware code in folders under `components/` (for example `protected/`, `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
+- Keep feature-aware code in folders under `components/` (for example `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
 - File names stay lowercase dash-separated (or a single word) to mirror the component they expose, with non-visual helpers using `.ts` instead of `.tsx` when appropriate.
 - Shared UI primitives derived from shadcn/ui live in `components/ui/`; each file wraps the primitive, exports a PascalCase component, and re-exports helper variants as needed.
-- Protected layout pieces collect under `components/protected/` so the shared shell, sidebar, and header stay in sync.
+- The shared sidebar lives in `components/app-sidebar.tsx` with helper menus under `components/nav-*.tsx`.
 - Interactive components that rely on client-side hooks include the `"use client"` directive at the top of the file for consistency.
 
 ## Getting Started
@@ -90,7 +90,7 @@ These guardrails ensure every account has sensible defaults before team members 
 ## Working in the Repo
 
 - Keep shared authenticated UI minimal in `components/app-sidebar.tsx` and the accompanying `nav-*` helpers; extend them as needed for your product surface.
-- Access Supabase via helpers in `lib/supabase` or domain utilities like `lib/dashboard.ts` to stay RLS-safe.
+- Access Supabase via helpers in `lib/supabase` or domain utilities like `lib/kitchen.ts` to stay RLS-safe.
 - Sidebar palette tokens live alongside the global Tailwind config in `app/globals.css`.
 - The marketing site and dashboard each have their own route groups under `app/`, but everything shares the global `layout.tsx`.
 
