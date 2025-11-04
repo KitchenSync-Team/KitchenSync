@@ -1,13 +1,16 @@
 "use client"
 
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
 import {
-  BadgeCheck,
-  Bell,
   ChevronsUpDown,
-  CreditCard,
+  Laptop,
   LogOut,
-  Sparkles,
+  Moon,
+  Sun,
+  UserRound,
 } from "lucide-react"
+import { useTheme } from "next-themes"
 
 import {
   Avatar,
@@ -20,7 +23,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -30,16 +38,37 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-export function NavUser({
-  user,
-}: {
-  user: {
-    name: string
-    email: string
-    avatar: string
+export type NavUserData = {
+  name?: string | null
+  email?: string | null
+  avatarUrl?: string | null
+}
+
+function getInitials(name?: string | null, fallback?: string | null) {
+  const source = (name ?? fallback ?? "").trim()
+  if (!source) return "KS"
+  const parts = source.split(/\s+/)
+  if (parts.length === 1) {
+    return parts[0]!.slice(0, 2).toUpperCase()
   }
-}) {
+  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase()
+}
+
+export function NavUser({ user }: { user: NavUserData }) {
   const { isMobile } = useSidebar()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const displayName = user.name?.trim() || user.email?.trim() || "Kitchen member"
+  const displayEmail = user.email?.trim() || "Email unavailable"
+  const initials = useMemo(
+    () => getInitials(user.name, user.email),
+    [user.name, user.email]
+  )
 
   return (
     <SidebarMenu>
@@ -51,14 +80,14 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarImage src={user.avatarUrl ?? undefined} alt={displayName} />
+                <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+                <span className="truncate font-medium">{displayName}</span>
+                <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -69,41 +98,61 @@ export function NavUser({
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <Avatar className="h-9 w-9 rounded-lg">
+                  <AvatarImage src={user.avatarUrl ?? undefined} alt={displayName} />
+                  <AvatarFallback className="rounded-lg text-sm font-semibold">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs">{user.email}</span>
+                  <span className="truncate font-medium">{displayName}</span>
+                  <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Sparkles />
-                Upgrade to Pro
+              <DropdownMenuItem asChild>
+                <Link href="/protected/profile">
+                  <UserRound className="size-4 text-muted-foreground" />
+                  User &amp; Preferences
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Bell />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Sun className="size-4 text-muted-foreground" />
+                Theme
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent
+                side={isMobile ? "top" : "right"}
+                align={isMobile ? "end" : "start"}
+              >
+                {mounted ? (
+                  <DropdownMenuRadioGroup
+                    value={theme}
+                    onValueChange={(value) => setTheme(value)}
+                  >
+                    <DropdownMenuRadioItem value="light">
+                      <Sun className="size-4 text-muted-foreground" />
+                      Light
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark">
+                      <Moon className="size-4 text-muted-foreground" />
+                      Dark
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="system">
+                      <Laptop className="size-4 text-muted-foreground" />
+                      System
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                ) : null}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <LogOut />
+              <LogOut className="size-4 text-muted-foreground" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
