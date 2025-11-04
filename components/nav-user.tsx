@@ -11,6 +11,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 
 import {
   Avatar,
@@ -37,6 +38,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { createClient } from "@/lib/supabase/client"
 
 export type NavUserData = {
   name?: string | null
@@ -57,7 +59,9 @@ function getInitials(name?: string | null, fallback?: string | null) {
 export function NavUser({ user }: { user: NavUserData }) {
   const { isMobile } = useSidebar()
   const { theme, setTheme } = useTheme()
+  const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -151,7 +155,22 @@ export function NavUser({ user }: { user: NavUserData }) {
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2"
+              disabled={isLoggingOut}
+              onSelect={async (event) => {
+                event.preventDefault()
+                if (isLoggingOut) return
+                try {
+                  setIsLoggingOut(true)
+                  const supabase = createClient()
+                  await supabase.auth.signOut()
+                  router.push("/auth/login")
+                } finally {
+                  setIsLoggingOut(false)
+                }
+              }}
+            >
               <LogOut className="size-4 text-muted-foreground" />
               Log out
             </DropdownMenuItem>

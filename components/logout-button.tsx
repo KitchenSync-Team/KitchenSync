@@ -1,10 +1,12 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
-import { Button, type ButtonProps } from "@/components/ui/button";
+import type { ComponentPropsWithoutRef } from "react";
 import { useRouter } from "next/navigation";
 
-type LogoutButtonProps = ButtonProps;
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+
+type LogoutButtonProps = ComponentPropsWithoutRef<typeof Button>;
 
 export function LogoutButton({
   variant = "outline",
