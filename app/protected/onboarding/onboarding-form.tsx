@@ -430,8 +430,7 @@ export function OnboardingForm({
 
   const handleFormSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
-      const issues = profileIssues;
-      if (issues.length > 0) {
+      if (profileIssues.length > 0) {
         event.preventDefault();
         setStepIndex(0);
         return;
