@@ -1,38 +1,56 @@
 'use client';
 
-import { useState } from 'react';
-import { createClient } from '@/lib/client'; // <-- your file
+import { FormEvent, useState } from 'react';
+import { createClient } from '@/lib/client';
 
 type Option = { id: string | number; name: string };
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  kitchenId: string;              // pass from Dashboard
-  units: Option[];                // preload from DB
-  locations: Option[];            // preload from DB
-  onCreated?: () => void;         // callback to refresh list
+  kitchenId: string;      // pass from Dashboard
+  units: Option[];        // preload from DB
+  locations: Option[];    // preload from DB
+  onCreated?: () => void; // callback to refresh list
+};
+
+type FormState = {
+  name: string;
+  quantity: string;
+  unit_id: string;
+  location_id: string;
+  expiration_date: string;
+  notes: string;
+};
+
+const makeInitialState = (): FormState => ({
+  name: '',
+  quantity: '1',
+  unit_id: '',
+  location_id: '',
+  expiration_date: '',
+  notes: '',
+});
+
+const resolveSelectedId = (value: string, options: Option[]): string | number | null => {
+  if (!value) return null;
+  const match = options.find(option => String(option.id) === value);
+  return match ? match.id : value;
 };
 
 export default function AddItemModal({ open, onClose, kitchenId, units, locations, onCreated }: Props) {
   const supabase = createClient();
-
-  const [form, setForm] = useState({
-    name: '',
-    quantity: 1,
-    unit_id: '' as string | number | '',
-    location_id: '' as string | number | '',
-    expiration_date: '',
-    notes: '',
-  });
+  const [form, setForm] = useState<FormState>(() => makeInitialState());
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const update = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm(current => ({ ...current, [key]: value }));
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErr(null);
     setLoading(true);
@@ -41,19 +59,23 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
         kitchen_id: kitchenId,
         name: form.name.trim(),
         quantity: Number(form.quantity) || 0,
-        unit_id: form.unit_id || null,
-        location_id: form.location_id || null,
+        unit_id: resolveSelectedId(form.unit_id, units),
+        location_id: resolveSelectedId(form.location_id, locations),
         expiration_date: form.expiration_date || null, // 'YYYY-MM-DD'
         notes: form.notes || null,
       };
       const { error } = await supabase.from('items').insert(payload);
-      if (error) throw error;
+      if (error) {
+        setErr(error.message ?? 'Failed to add item');
+        return;
+      }
 
       onCreated?.();
       onClose();
-      setForm({ name: '', quantity: 1, unit_id: '', location_id: '', expiration_date: '', notes: '' });
-    } catch (e: any) {
-      setErr(e.message ?? 'Failed to add item');
+      setForm(makeInitialState());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add item';
+      setErr(message);
     } finally {
       setLoading(false);
     }
@@ -99,7 +121,11 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
                 onChange={e => update('unit_id', e.target.value)}
               >
                 <option value="">—</option>
-                {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                {units.map(u => (
+                  <option key={u.id} value={String(u.id)}>
+                    {u.name}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -112,7 +138,11 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
               onChange={e => update('location_id', e.target.value)}
             >
               <option value="">—</option>
-              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {locations.map(l => (
+                <option key={l.id} value={String(l.id)}>
+                  {l.name}
+                </option>
+              ))}
             </select>
           </label>
 
