@@ -78,6 +78,8 @@ These guardrails ensure every account has sensible defaults before team members 
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
    - Optional: `NEXT_PUBLIC_SITE_URL` for auth redirects
+   
+   Use your Supabase project dashboard (`Project Settings → API`) to copy the Project URL, anon key, and service role key into the matching variables. If you deploy to Vercel, set `NEXT_PUBLIC_SITE_URL` (and the other public keys) in the Vercel dashboard under `Project Settings → Environment Variables`; for local work you can leave it unset or point to your desired base URL.
 
 4. **Run & validate**
    ```bash
