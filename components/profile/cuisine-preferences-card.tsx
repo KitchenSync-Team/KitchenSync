@@ -17,10 +17,10 @@ type CuisinePreferencesCardProps = {
   likes: string[]
   dislikes: string[]
   cuisineOptions: Record<string, string>
-  onChange?: (payload: { likes: string[]; dislikes: string[] }) => void
+  onChangeAction?: (payload: { likes: string[]; dislikes: string[] }) => void
 }
 
-export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChange }: CuisinePreferencesCardProps) {
+export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChangeAction }: CuisinePreferencesCardProps) {
   const [likeSelections, setLikeSelections] = useState<Set<string>>(new Set(likes))
   const [dislikeSelections, setDislikeSelections] = useState<Set<string>>(new Set(dislikes))
 
@@ -155,8 +155,8 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChan
           onClick={() => {
             const nextLikes = Array.from(likeSelections).sort()
             const nextDislikes = Array.from(dislikeSelections).sort()
-            if (onChange) {
-              onChange({ likes: nextLikes, dislikes: nextDislikes })
+            if (onChangeAction) {
+              onChangeAction({ likes: nextLikes, dislikes: nextDislikes })
             } else {
               console.info("TODO: save cuisine preferences", { likes: nextLikes, dislikes: nextDislikes })
             }

@@ -20,7 +20,7 @@ type DietaryPreferencesCardProps = {
   allergens: string[]
   dietaryOptions: Record<string, string>
   allergenOptions: Record<string, string>
-  onChange?: (payload: { dietaryPreferences: string[]; allergens: string[] }) => void
+  onChangeAction?: (payload: { dietaryPreferences: string[]; allergens: string[] }) => void
 }
 
 export function DietaryPreferencesCard({
@@ -28,7 +28,7 @@ export function DietaryPreferencesCard({
   allergens,
   dietaryOptions,
   allergenOptions,
-  onChange,
+  onChangeAction,
 }: DietaryPreferencesCardProps) {
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set(dietaryPreferences))
   const [allergenSelections, setAllergenSelections] = useState<Set<string>>(new Set(allergens))
@@ -141,8 +141,8 @@ export function DietaryPreferencesCard({
           size="sm"
           disabled={!hasChanges}
           onClick={() => {
-            if (onChange) {
-              onChange({
+            if (onChangeAction) {
+              onChangeAction({
                 dietaryPreferences: Array.from(dietarySelections).sort(),
                 allergens: Array.from(allergenSelections).sort(),
               })

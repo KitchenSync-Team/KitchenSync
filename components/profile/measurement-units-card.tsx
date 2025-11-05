@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 
 type MeasurementUnitsCardProps = {
   unitsSystem: "imperial" | "metric"
-  onChange?: (units: "imperial" | "metric") => void
+  onChangeAction?: (units: "imperial" | "metric") => void
 }
 
 const unitOptions = [
@@ -31,7 +31,7 @@ const unitOptions = [
   },
 ]
 
-export function MeasurementUnitsCard({ unitsSystem, onChange }: MeasurementUnitsCardProps) {
+export function MeasurementUnitsCard({ unitsSystem, onChangeAction }: MeasurementUnitsCardProps) {
   const [selection, setSelection] = useState<"imperial" | "metric">(unitsSystem)
 
   const isDirty = selection !== unitsSystem
@@ -79,8 +79,8 @@ export function MeasurementUnitsCard({ unitsSystem, onChange }: MeasurementUnits
           size="sm"
           disabled={!isDirty}
           onClick={() => {
-            if (onChange) {
-              onChange(selection)
+            if (onChangeAction) {
+              onChangeAction(selection)
             } else {
               console.info("TODO: save measurement units", selection)
             }
