@@ -30,11 +30,11 @@ type ProfileCardProps = {
   emailOptIn: boolean
   personalizationOptIn: boolean
   lastPasswordUpdate?: string | null
-  onSaveProfile?: (payload: { firstName: string; lastName: string; sex: string | undefined }) => void
-  onChangeAvatar?: () => void
-  onUpdateEmail?: (payload: { email: string }) => void
-  onResetPassword?: (payload: { password: string }) => void
-  onSaveCommunication?: (payload: { emailOptIn: boolean; personalizationOptIn: boolean }) => void
+  onSaveProfileAction?: (payload: { firstName: string; lastName: string; sex: string | undefined }) => void
+  onChangeAvatarAction?: () => void
+  onUpdateEmailAction?: (payload: { email: string }) => void
+  onResetPasswordAction?: (payload: { password: string }) => void
+  onSaveCommunicationAction?: (payload: { emailOptIn: boolean; personalizationOptIn: boolean }) => void
 }
 
 export function ProfileCard({
@@ -46,11 +46,11 @@ export function ProfileCard({
   sex,
   emailOptIn,
   personalizationOptIn,
-  onSaveProfile,
-  onChangeAvatar,
-  onUpdateEmail,
-  onResetPassword,
-  onSaveCommunication,
+  onSaveProfileAction,
+  onChangeAvatarAction,
+  onUpdateEmailAction,
+  onResetPasswordAction,
+  onSaveCommunicationAction,
 }: ProfileCardProps) {
   const [first, setFirst] = useState(firstName ?? "")
   const [last, setLast] = useState(lastName ?? "")
@@ -113,8 +113,8 @@ export function ProfileCard({
 
   const handleIdentitySave = () => {
     if (!hasIdentityChange) return
-    if (onSaveProfile) {
-      onSaveProfile({ firstName: first, lastName: last, sex: gender })
+    if (onSaveProfileAction) {
+      onSaveProfileAction({ firstName: first, lastName: last, sex: gender })
     } else {
       console.info("TODO: save profile", { firstName: first, lastName: last, sex: gender })
     }
@@ -124,15 +124,15 @@ export function ProfileCard({
     if (!canSaveCredentials) return
 
     if (emailChanged) {
-      if (onUpdateEmail) {
-        onUpdateEmail({ email: emailDraft })
+      if (onUpdateEmailAction) {
+        onUpdateEmailAction({ email: emailDraft })
       } else {
         console.info("TODO: update email", emailDraft)
       }
     }
     if (passwordTouched && currentPasswordProvided && isPasswordValid) {
-      if (onResetPassword) {
-        onResetPassword({ password: passwordDraft })
+      if (onResetPasswordAction) {
+        onResetPasswordAction({ password: passwordDraft })
       } else {
         console.info("TODO: reset password")
       }
@@ -149,8 +149,8 @@ export function ProfileCard({
 
   const handleCommunicationSave = () => {
     if (!hasCommunicationChanges) return
-    if (onSaveCommunication) {
-      onSaveCommunication({
+    if (onSaveCommunicationAction) {
+      onSaveCommunicationAction({
         emailOptIn: emailUpdates,
         personalizationOptIn: personalizedSuggestions,
       })
@@ -177,8 +177,8 @@ export function ProfileCard({
               variant="outline"
               size="sm"
               onClick={() => {
-                if (onChangeAvatar) {
-                  onChangeAvatar()
+                if (onChangeAvatarAction) {
+                  onChangeAvatarAction()
                 } else {
                   console.info("TODO: open avatar picker")
                 }
