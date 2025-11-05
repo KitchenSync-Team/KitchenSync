@@ -134,6 +134,20 @@ const STEP_DETAILS = [
   },
 ] as const;
 
+const sanitizeSexValue = (value: string | null): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const allowedValues = new Set(SEX_OPTIONS.map((option) => option.value));
+  return allowedValues.has(trimmed) ? trimmed : undefined;
+};
+
 export function OnboardingForm({
   kitchenId,
   kitchenName,
@@ -204,7 +218,7 @@ export function OnboardingForm({
 
   const [firstName, setFirstName] = useState(initialProfile.firstName ?? "");
   const [lastName, setLastName] = useState(initialProfile.lastName ?? "");
-  const [sex, setSex] = useState<string | undefined>(initialProfile.sex ?? undefined);
+  const [sex, setSex] = useState<string | undefined>(() => sanitizeSexValue(initialProfile.sex));
   const [formKitchenName, setFormKitchenName] = useState(kitchenName);
 
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(
@@ -283,7 +297,39 @@ export function OnboardingForm({
     }
   }, [locationSummary.total, activeError, clearError]);
 
+  const profileIssues = useMemo(() => {
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+    const allowedValues = new Set(SEX_OPTIONS.map((option) => option.value));
+    const hasValidSex = typeof sex === "string" && allowedValues.has(sex);
+
+    const issues: string[] = [];
+
+    if (!trimmedFirstName && !trimmedLastName) {
+      issues.push("Missing first and last name");
+    } else {
+      if (!trimmedFirstName) {
+        issues.push("Missing first name");
+      }
+      if (!trimmedLastName) {
+        issues.push("Missing last name");
+      }
+    }
+
+    if (!hasValidSex) {
+      issues.push("Missing gender");
+    }
+
+    return issues;
+  }, [firstName, lastName, sex]);
+
+  const isProfileInvalid = profileIssues.length > 0;
+
   const handleContinue = () => {
+    if (stepIndex === 0 && isProfileInvalid) {
+      return;
+    }
+
     setStepIndex((current) => Math.min(current + 1, totalSteps - 1));
   };
 
@@ -384,6 +430,13 @@ export function OnboardingForm({
 
   const handleFormSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
+      const issues = profileIssues;
+      if (issues.length > 0) {
+        event.preventDefault();
+        setStepIndex(0);
+        return;
+      }
+
       if (locationSummary.total === 0) {
         event.preventDefault();
         return;
@@ -393,7 +446,7 @@ export function OnboardingForm({
         clearError();
       }
     },
-    [locationSummary.total, activeError, clearError],
+    [profileIssues, locationSummary.total, activeError, clearError],
   );
 
   const submitDisabled = locationSummary.total === 0;
@@ -445,14 +498,27 @@ export function OnboardingForm({
         className={cn("space-y-6", stepIndex === 0 ? "block" : "hidden")}
         aria-hidden={stepIndex !== 0}
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>About you</CardTitle>
-            <CardDescription>
-              {userName
-                ? `Welcome, ${userName}! Update anything we should know about you.`
-                : "Let your collaborators know who they’re cooking with."}
-            </CardDescription>
+        <Card
+          className={cn(
+            isProfileInvalid
+              ? "border-red-400 dark:border-red-500"
+              : undefined,
+          )}
+        >
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle>About you</CardTitle>
+              <CardDescription>
+                {userName
+                  ? `Welcome, ${userName}! Update anything we should know about you.`
+                  : "Let your collaborators know who they’re cooking with."}
+              </CardDescription>
+            </div>
+            {isProfileInvalid ? (
+              <div className="inline-flex max-w-xs items-center rounded-full border border-red-400 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-600 dark:border-red-500 dark:bg-red-500/15 dark:text-red-200">
+                {profileIssues.join(" | ")}
+              </div>
+            ) : null}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -463,9 +529,12 @@ export function OnboardingForm({
                   name="firstName-controlled"
                   placeholder="Jordan"
                   value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
+                  onChange={(event) => {
+                    setFirstName(event.target.value);
+                  }}
                   maxLength={120}
                   autoComplete="given-name"
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -475,15 +544,23 @@ export function OnboardingForm({
                   name="lastName-controlled"
                   placeholder="Morgan"
                   value={lastName}
-                  onChange={(event) => setLastName(event.target.value)}
+                  onChange={(event) => {
+                    setLastName(event.target.value);
+                  }}
                   maxLength={120}
                   autoComplete="family-name"
+                  required
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="sex">How do you describe yourself?</Label>
-              <Select value={sex} onValueChange={setSex}>
+              <Select
+                value={sex}
+                onValueChange={(value) => {
+                  setSex(value);
+                }}
+              >
                 <SelectTrigger
                   id="sex"
                   name="sex-controlled"
@@ -503,7 +580,9 @@ export function OnboardingForm({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Optional. We use it in greetings and wellness insights.</p>
+              <p className="text-xs text-muted-foreground">
+                Pick the option that fits best&mdash;choose &quot;Prefer not to say&quot; if you don&apos;t want to share.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -847,7 +926,8 @@ export function OnboardingForm({
               type="button"
               onClick={handleContinue}
               className="bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:ring-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-              disabled={stepIndex === 2 && locationSummary.total === 0}
+              aria-disabled={stepIndex === 0 && isProfileInvalid ? true : undefined}
+              disabled={stepIndex === 0 && isProfileInvalid}
             >
               Continue
             </Button>
