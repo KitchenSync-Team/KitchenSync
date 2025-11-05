@@ -58,9 +58,23 @@ export async function completeOnboarding(
       typeof firstNameRaw === "string" ? firstNameRaw.trim().slice(0, 120) : "";
     const lastName = typeof lastNameRaw === "string" ? lastNameRaw.trim().slice(0, 120) : "";
 
+    if (firstName.length === 0 || lastName.length === 0) {
+      return {
+        status: "error",
+        error: "Add both a first and last name to continue.",
+      };
+    }
+
     const allowedSexValues = new Set(SEX_OPTIONS.map((option) => option.value));
     const sex =
       typeof sexRaw === "string" && allowedSexValues.has(sexRaw) ? (sexRaw as string) : null;
+
+    if (!sex) {
+      return {
+        status: "error",
+        error: "Select a gender option to continue.",
+      };
+    }
 
     const allowedDietaryValues = new Set(DIETARY_OPTIONS.map((option) => option.value));
     const dietaryPreferences = Array.from(

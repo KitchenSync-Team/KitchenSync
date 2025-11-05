@@ -7,11 +7,11 @@ type Option = { id: string | number; name: string };
 
 type Props = {
   open: boolean;
-  onClose: () => void;
+  onCloseAction: () => void;
   kitchenId: string;      // pass from Dashboard
   units: Option[];        // preload from DB
   locations: Option[];    // preload from DB
-  onCreated?: () => void; // callback to refresh list
+  onCreatedAction?: () => void; // callback to refresh list
 };
 
 type FormState = {
@@ -38,7 +38,14 @@ const resolveSelectedId = (value: string, options: Option[]): string | number | 
   return match ? match.id : value;
 };
 
-export default function AddItemModal({ open, onClose, kitchenId, units, locations, onCreated }: Props) {
+export default function AddItemModal({
+  open,
+  onCloseAction,
+  kitchenId,
+  units,
+  locations,
+  onCreatedAction,
+}: Props) {
   const supabase = createClient();
   const [form, setForm] = useState<FormState>(() => makeInitialState());
   const [loading, setLoading] = useState(false);
@@ -70,8 +77,8 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
         return;
       }
 
-      onCreated?.();
-      onClose();
+      onCreatedAction?.();
+      onCloseAction();
       setForm(makeInitialState());
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add item';
@@ -86,7 +93,7 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Add Item</h2>
-          <button onClick={onClose} className="rounded px-2 py-1">✕</button>
+          <button onClick={onCloseAction} className="rounded px-2 py-1">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="grid gap-3">
