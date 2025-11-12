@@ -1,6 +1,17 @@
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Page() {
+export default async function Page() {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session) {
+    redirect("/protected");
+  }
+
   return (
     <>
       <div className="space-y-2 text-center">
