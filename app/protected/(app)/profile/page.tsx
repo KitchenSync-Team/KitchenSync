@@ -10,7 +10,6 @@ import {
   CUISINE_PREFERENCE_OPTIONS,
   DIETARY_OPTIONS,
 } from "@/app/protected/onboarding/constants"
-
 export default async function ProfilePage() {
   const kitchenSnapshot = await resolveKitchen()
   const { user, preferences } = kitchenSnapshot

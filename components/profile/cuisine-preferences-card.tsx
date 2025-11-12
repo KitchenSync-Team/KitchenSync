@@ -1,6 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+import { updateCuisinePreferencesClient } from "@/components/profile/profile-mutations"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -17,12 +21,13 @@ type CuisinePreferencesCardProps = {
   likes: string[]
   dislikes: string[]
   cuisineOptions: Record<string, string>
-  onChangeAction?: (payload: { likes: string[]; dislikes: string[] }) => void
 }
 
-export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChangeAction }: CuisinePreferencesCardProps) {
+export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions }: CuisinePreferencesCardProps) {
+  const router = useRouter()
   const [likeSelections, setLikeSelections] = useState<Set<string>>(new Set(likes))
   const [dislikeSelections, setDislikeSelections] = useState<Set<string>>(new Set(dislikes))
+  const [saving, setSaving] = useState(false)
 
   const sortedCuisineOptions = useMemo(
     () => Object.entries(cuisineOptions).sort((a, b) => a[1].localeCompare(b[1])),
@@ -31,6 +36,28 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChan
 
   const hasChanges =
     !setEquals(likeSelections, new Set(likes)) || !setEquals(dislikeSelections, new Set(dislikes))
+
+  const handleSave = async () => {
+    if (!hasChanges) return
+    setSaving(true)
+    try {
+      const nextLikes = Array.from(likeSelections).sort()
+      const nextDislikes = Array.from(dislikeSelections).sort()
+      const result = await updateCuisinePreferencesClient({ likes: nextLikes, dislikes: nextDislikes })
+      if (!result.success) {
+        toast.error("Couldn’t save cuisine preferences", {
+          description: result.error ?? "Please try again.",
+        })
+        return
+      }
+      toast.success("Cuisine preferences saved", {
+        description: "We’ll highlight and hide cuisines accordingly.",
+      })
+      router.refresh()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const toggleLike = (value: string) => {
     setLikeSelections((previous) => {
@@ -141,7 +168,7 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChan
         <Button
           variant="outline"
           size="sm"
-          disabled={!hasChanges}
+          disabled={!hasChanges || saving}
           onClick={() => {
             setLikeSelections(new Set(likes))
             setDislikeSelections(new Set(dislikes))
@@ -151,18 +178,10 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions, onChan
         </Button>
         <Button
           size="sm"
-          disabled={!hasChanges}
-          onClick={() => {
-            const nextLikes = Array.from(likeSelections).sort()
-            const nextDislikes = Array.from(dislikeSelections).sort()
-            if (onChangeAction) {
-              onChangeAction({ likes: nextLikes, dislikes: nextDislikes })
-            } else {
-              console.info("TODO: save cuisine preferences", { likes: nextLikes, dislikes: nextDislikes })
-            }
-          }}
+          disabled={!hasChanges || saving}
+          onClick={handleSave}
         >
-          Save preferences
+          {saving ? "Saving…" : "Save preferences"}
         </Button>
       </CardFooter>
     </Card>

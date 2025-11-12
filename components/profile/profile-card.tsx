@@ -1,6 +1,16 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+import {
+  saveIdentityClient,
+  updateCommunicationPreferencesClient,
+  updateEmailClient,
+  updatePasswordClient,
+} from "@/components/profile/profile-mutations"
+import { AvatarUploader } from "@/components/profile/avatar-uploader"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -30,11 +40,6 @@ type ProfileCardProps = {
   emailOptIn: boolean
   personalizationOptIn: boolean
   lastPasswordUpdate?: string | null
-  onSaveProfileAction?: (payload: { firstName: string; lastName: string; sex: string | undefined }) => void
-  onChangeAvatarAction?: () => void
-  onUpdateEmailAction?: (payload: { email: string }) => void
-  onResetPasswordAction?: (payload: { password: string }) => void
-  onSaveCommunicationAction?: (payload: { emailOptIn: boolean; personalizationOptIn: boolean }) => void
 }
 
 export function ProfileCard({
@@ -46,12 +51,8 @@ export function ProfileCard({
   sex,
   emailOptIn,
   personalizationOptIn,
-  onSaveProfileAction,
-  onChangeAvatarAction,
-  onUpdateEmailAction,
-  onResetPasswordAction,
-  onSaveCommunicationAction,
 }: ProfileCardProps) {
+  const router = useRouter()
   const [first, setFirst] = useState(firstName ?? "")
   const [last, setLast] = useState(lastName ?? "")
   const [gender, setGender] = useState<string | undefined>(sex ?? undefined)
@@ -62,6 +63,9 @@ export function ProfileCard({
 
   const [emailUpdates, setEmailUpdates] = useState(emailOptIn)
   const [personalizedSuggestions, setPersonalizedSuggestions] = useState(personalizationOptIn)
+  const [identityPending, setIdentityPending] = useState(false)
+  const [credentialsPending, setCredentialsPending] = useState(false)
+  const [communicationPending, setCommunicationPending] = useState(false)
 
   useEffect(() => {
     setFirst(firstName ?? "")
@@ -111,33 +115,79 @@ export function ProfileCard({
   const hasCommunicationChanges =
     emailUpdates !== emailOptIn || personalizedSuggestions !== personalizationOptIn
 
-  const handleIdentitySave = () => {
+  const handleIdentitySave = async () => {
     if (!hasIdentityChange) return
-    if (onSaveProfileAction) {
-      onSaveProfileAction({ firstName: first, lastName: last, sex: gender })
-    } else {
-      console.info("TODO: save profile", { firstName: first, lastName: last, sex: gender })
+
+    const trimmedFirst = first.trim()
+    const trimmedLast = last.trim()
+
+    if (!trimmedFirst || !trimmedLast) {
+      toast.error("Missing name details", {
+        description: "Enter both a first and last name before saving.",
+      })
+      return
+    }
+
+    setIdentityPending(true)
+    try {
+      const result = await saveIdentityClient({
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        sex: gender,
+      })
+      if (!result.success) {
+        toast.error("Couldn’t update profile", {
+          description: result.error ?? "Please try again.",
+        })
+        return
+      }
+      toast.success("Profile updated", {
+        description: "Your identity details are now synced.",
+      })
+      router.refresh()
+    } finally {
+      setIdentityPending(false)
     }
   }
 
-  const handleCredentialsSave = () => {
+  const handleCredentialsSave = async () => {
     if (!canSaveCredentials) return
+    setCredentialsPending(true)
 
-    if (emailChanged) {
-      if (onUpdateEmailAction) {
-        onUpdateEmailAction({ email: emailDraft })
-      } else {
-        console.info("TODO: update email", emailDraft)
+    try {
+      if (emailChanged) {
+        const emailResult = await updateEmailClient({ email: emailDraft.trim() })
+        if (!emailResult.success) {
+          toast.error("Couldn’t update email", {
+            description: emailResult.error ?? "Please try again.",
+          })
+          return
+        }
+        toast.success("Email update requested", {
+          description: "Check your new inbox to confirm the change.",
+        })
       }
-    }
-    if (passwordTouched && currentPasswordProvided && isPasswordValid) {
-      if (onResetPasswordAction) {
-        onResetPasswordAction({ password: passwordDraft })
-      } else {
-        console.info("TODO: reset password")
+
+      if (passwordTouched && currentPasswordProvided && isPasswordValid) {
+        const passwordResult = await updatePasswordClient({
+          password: passwordDraft,
+        })
+        if (!passwordResult.success) {
+          toast.error("Couldn’t update password", {
+            description: passwordResult.error ?? "Please try again.",
+          })
+          return
+        }
+        toast.success("Password updated", {
+          description: "Your password has been changed.",
+        })
+        setPasswordDraft("")
+        setCurrentPassword("")
       }
-      setPasswordDraft("")
-      setCurrentPassword("")
+
+      router.refresh()
+    } finally {
+      setCredentialsPending(false)
     }
   }
 
@@ -147,18 +197,26 @@ export function ProfileCard({
     setCurrentPassword("")
   }
 
-  const handleCommunicationSave = () => {
+  const handleCommunicationSave = async () => {
     if (!hasCommunicationChanges) return
-    if (onSaveCommunicationAction) {
-      onSaveCommunicationAction({
+    setCommunicationPending(true)
+    try {
+      const result = await updateCommunicationPreferencesClient({
         emailOptIn: emailUpdates,
         personalizationOptIn: personalizedSuggestions,
       })
-    } else {
-      console.info("TODO: save communication preferences", {
-        emailOptIn: emailUpdates,
-        personalizationOptIn: personalizedSuggestions,
+      if (!result.success) {
+        toast.error("Couldn’t update preferences", {
+          description: result.error ?? "Please try again.",
+        })
+        return
+      }
+      toast.success("Preferences saved", {
+        description: "Your communication settings are up to date.",
       })
+      router.refresh()
+    } finally {
+      setCommunicationPending(false)
     }
   }
 
@@ -169,23 +227,16 @@ export function ProfileCard({
           <div className="flex flex-col items-center gap-4">
             <Avatar className="size-40">
               {avatarUrl ? (
-                <AvatarImage src={avatarUrl} alt={fullName ?? email ?? "KitchenSync member"} />
+                <AvatarImage
+                  key={avatarUrl}
+                  src={avatarUrl}
+                  alt={fullName ?? email ?? "KitchenSync member"}
+                  className="h-full w-full object-cover"
+                />
               ) : null}
               <AvatarFallback className="text-4xl font-semibold">{initials}</AvatarFallback>
             </Avatar>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (onChangeAvatarAction) {
-                  onChangeAvatarAction()
-                } else {
-                  console.info("TODO: open avatar picker")
-                }
-              }}
-            >
-              Change avatar
-            </Button>
+            <AvatarUploader currentAvatarUrl={avatarUrl} fallbackText={initials} />
           </div>
         </div>
 
@@ -243,7 +294,7 @@ export function ProfileCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!hasIdentityChange}
+                  disabled={!hasIdentityChange || identityPending}
                   onClick={() => {
                     setFirst(firstName ?? "")
                     setLast(lastName ?? "")
@@ -252,8 +303,8 @@ export function ProfileCard({
                 >
                   Reset
                 </Button>
-                <Button size="sm" disabled={!hasIdentityChange} onClick={handleIdentitySave}>
-                  Save identity
+                <Button size="sm" disabled={!hasIdentityChange || identityPending} onClick={handleIdentitySave}>
+                  {identityPending ? "Saving…" : "Save identity"}
                 </Button>
               </CardFooter>
             </Card>
@@ -305,13 +356,17 @@ export function ProfileCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!hasCredentialChanges}
+                  disabled={!hasCredentialChanges || credentialsPending}
                   onClick={handleCredentialsReset}
                 >
                   Reset
                 </Button>
-                <Button size="sm" disabled={!canSaveCredentials} onClick={handleCredentialsSave}>
-                  Save credentials
+                <Button
+                  size="sm"
+                  disabled={!canSaveCredentials || credentialsPending}
+                  onClick={handleCredentialsSave}
+                >
+                  {credentialsPending ? "Saving…" : "Save credentials"}
                 </Button>
               </CardFooter>
             </Card>
@@ -341,10 +396,10 @@ export function ProfileCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!hasCommunicationChanges}
+                  disabled={!hasCommunicationChanges || communicationPending}
                   onClick={handleCommunicationSave}
                 >
-                  Save preferences
+                  {communicationPending ? "Saving…" : "Save preferences"}
                 </Button>
               </CardFooter>
             </Card>

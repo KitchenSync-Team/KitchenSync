@@ -1,6 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+import { updateDietaryProfileClient } from "@/components/profile/profile-mutations"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -20,16 +24,9 @@ type DietaryPreferencesCardProps = {
   allergens: string[]
   dietaryOptions: Record<string, string>
   allergenOptions: Record<string, string>
-  onChangeAction?: (payload: { dietaryPreferences: string[]; allergens: string[] }) => void
 }
 
-export function DietaryPreferencesCard({
-  dietaryPreferences,
-  allergens,
-  dietaryOptions,
-  allergenOptions,
-  onChangeAction,
-}: DietaryPreferencesCardProps) {
+export function DietaryPreferencesCard({ dietaryPreferences, allergens, dietaryOptions, allergenOptions }: DietaryPreferencesCardProps) {
   const [dietarySelections, setDietarySelections] = useState<Set<string>>(new Set(dietaryPreferences))
   const [allergenSelections, setAllergenSelections] = useState<Set<string>>(new Set(allergens))
 
@@ -42,9 +39,35 @@ export function DietaryPreferencesCard({
     [allergenOptions],
   )
 
+  const router = useRouter()
+  const [saving, setSaving] = useState(false)
+
   const hasChanges =
     !setEquals(dietarySelections, new Set(dietaryPreferences)) ||
     !setEquals(allergenSelections, new Set(allergens))
+
+  const handleSave = async () => {
+    if (!hasChanges) return
+    setSaving(true)
+    try {
+      const result = await updateDietaryProfileClient({
+        dietaryPreferences: Array.from(dietarySelections).sort(),
+        allergens: Array.from(allergenSelections).sort(),
+      })
+      if (!result.success) {
+        toast.error("Couldn’t save dietary profile", {
+          description: result.error ?? "Please try again.",
+        })
+        return
+      }
+      toast.success("Dietary profile saved", {
+        description: "We’ll tailor recommendations with your latest preferences.",
+      })
+      router.refresh()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Card>
@@ -129,7 +152,7 @@ export function DietaryPreferencesCard({
         <Button
           variant="outline"
           size="sm"
-          disabled={!hasChanges}
+          disabled={!hasChanges || saving}
           onClick={() => {
             setDietarySelections(new Set(dietaryPreferences))
             setAllergenSelections(new Set(allergens))
@@ -139,22 +162,10 @@ export function DietaryPreferencesCard({
         </Button>
         <Button
           size="sm"
-          disabled={!hasChanges}
-          onClick={() => {
-            if (onChangeAction) {
-              onChangeAction({
-                dietaryPreferences: Array.from(dietarySelections).sort(),
-                allergens: Array.from(allergenSelections).sort(),
-              })
-            } else {
-              console.info("TODO: save dietary profile", {
-                dietaryPreferences: Array.from(dietarySelections).sort(),
-                allergens: Array.from(allergenSelections).sort(),
-              })
-            }
-          }}
+          disabled={!hasChanges || saving}
+          onClick={handleSave}
         >
-          Save dietary profile
+          {saving ? "Saving…" : "Save dietary profile"}
         </Button>
       </CardFooter>
     </Card>

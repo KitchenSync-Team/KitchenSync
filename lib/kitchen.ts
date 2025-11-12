@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { getAvatarBucketName, normalizeAvatarKey } from "@/lib/storage/avatar";
 
 type UpcomingInventoryUnitRow = {
   id: string;
@@ -208,10 +209,49 @@ function toDateString(date: Date) {
   return date.toISOString().split("T")[0] ?? "";
 }
 
+async function generateSignedAvatarUrl(
+  adminClient: ReturnType<typeof createServiceRoleClient>,
+  storedValue: string | null,
+): Promise<string | null> {
+  if (!storedValue) return null;
+
+  const bucket = getAvatarBucketName();
+  if (!bucket) return null;
+
+  const objectKey = normalizeAvatarKey(storedValue);
+  if (!objectKey) return null;
+
+  const { data, error } = await adminClient.storage.from(bucket).createSignedUrl(objectKey, 60 * 60);
+  if (error) {
+    return null;
+  }
+
+  const signedUrl = (data?.signedUrl ?? data?.signedURL ?? "").toString();
+  if (!signedUrl) {
+    return null;
+  }
+
+  if (signedUrl.startsWith("http")) {
+    return signedUrl;
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  if (!baseUrl) {
+    return null;
+  }
+
+  if (signedUrl.startsWith("/")) {
+    return `${baseUrl}${signedUrl}`;
+  }
+  return `${baseUrl}/${signedUrl}`;
+}
+
 export async function loadKitchenData(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<KitchenSnapshot> {
+  const admin = createServiceRoleClient();
+
   const [{ data: profile, error: profileError }, { data: preferences, error: preferencesError }] =
     await Promise.all([
       supabase
@@ -241,6 +281,8 @@ export async function loadKitchenData(
   if (preferencesError) {
     throw preferencesError;
   }
+
+  const avatarUrl = await generateSignedAvatarUrl(admin, profile.avatar_url ?? null);
 
   const dietaryPreferences = Array.isArray(preferences?.dietary_preferences)
     ? (preferences?.dietary_preferences as unknown[])
@@ -495,7 +537,6 @@ export async function loadKitchenData(
   let members: KitchenMember[] | null = null;
   let memberCount: number | null = null;
 
-  const admin = createServiceRoleClient();
   const { data: roster, error: rosterError } = await admin
     .from("kitchen_members")
     .select("user_id, role, joined_at")
@@ -569,7 +610,7 @@ export async function loadKitchenData(
         profile.full_name ??
         (derivedFullName.length > 0 ? derivedFullName : null),
       email: profile.email ?? null,
-      avatarUrl: profile.avatar_url ?? null,
+      avatarUrl,
       onboardingComplete: Boolean(profile.onboarding_complete),
       sex: profile.sex ?? null,
     },

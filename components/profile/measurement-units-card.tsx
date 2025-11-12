@@ -1,6 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+import { updateUnitsSystemClient } from "@/components/profile/profile-mutations"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -15,7 +19,6 @@ import { cn } from "@/lib/utils"
 
 type MeasurementUnitsCardProps = {
   unitsSystem: "imperial" | "metric"
-  onChangeAction?: (units: "imperial" | "metric") => void
 }
 
 const unitOptions = [
@@ -31,10 +34,32 @@ const unitOptions = [
   },
 ]
 
-export function MeasurementUnitsCard({ unitsSystem, onChangeAction }: MeasurementUnitsCardProps) {
+export function MeasurementUnitsCard({ unitsSystem }: MeasurementUnitsCardProps) {
+  const router = useRouter()
   const [selection, setSelection] = useState<"imperial" | "metric">(unitsSystem)
+  const [saving, setSaving] = useState(false)
 
   const isDirty = selection !== unitsSystem
+
+  const handleSave = async () => {
+    if (!isDirty) return
+    setSaving(true)
+    try {
+      const result = await updateUnitsSystemClient({ units: selection })
+      if (!result.success) {
+        toast.error("Couldn’t update units", {
+          description: result.error ?? "Please try again.",
+        })
+        return
+      }
+      toast.success("Measurement units saved", {
+        description: "Future recipes and inventory will use this format.",
+      })
+      router.refresh()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Card>
@@ -70,23 +95,17 @@ export function MeasurementUnitsCard({ unitsSystem, onChangeAction }: Measuremen
         <Button
           variant="outline"
           size="sm"
-          disabled={!isDirty}
+          disabled={!isDirty || saving}
           onClick={() => setSelection(unitsSystem)}
         >
           Reset
         </Button>
         <Button
           size="sm"
-          disabled={!isDirty}
-          onClick={() => {
-            if (onChangeAction) {
-              onChangeAction(selection)
-            } else {
-              console.info("TODO: save measurement units", selection)
-            }
-          }}
+          disabled={!isDirty || saving}
+          onClick={handleSave}
         >
-          Save units
+          {saving ? "Saving…" : "Save units"}
         </Button>
       </CardFooter>
     </Card>
