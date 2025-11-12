@@ -4,7 +4,7 @@ import {
   MissingKitchenError,
   loadKitchenData,
   type LocationSummary,
-} from "@/lib/kitchen";
+} from "@/lib/domain/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
 import { OnboardingExperience } from "./onboarding-experience";

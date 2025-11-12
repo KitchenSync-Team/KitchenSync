@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 
-import { getSidebarIcon, type SidebarIconKey } from "@/components/sidebar-icons"
+import { getSidebarIcon, type SidebarIconKey } from "@/components/navigation/sidebar-icons"
 import {
   SidebarGroup,
   SidebarGroupLabel,

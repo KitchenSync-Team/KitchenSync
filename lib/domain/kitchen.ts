@@ -226,7 +226,7 @@ async function generateSignedAvatarUrl(
     return null;
   }
 
-  const signedUrl = (data?.signedUrl ?? data?.signedURL ?? "").toString();
+  const signedUrl = (data?.signedUrl ?? "").toString();
   if (!signedUrl) {
     return null;
   }

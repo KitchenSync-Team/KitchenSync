@@ -4,8 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { Check, ChefHat, ChevronsUpDown } from "lucide-react"
 
-import { NavMain, type NavMainItem } from "@/components/nav-main"
-import { NavUser, type NavUserData } from "@/components/nav-user"
+import { NavMain, type NavMainItem } from "@/components/navigation/nav-main"
+import { NavUser, type NavUserData } from "@/components/navigation/nav-user"
 import {
   DropdownMenu,
   DropdownMenuContent,

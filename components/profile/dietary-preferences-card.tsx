@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/supabase/utils"
 import { X } from "lucide-react"
 
 type DietaryPreferencesCardProps = {

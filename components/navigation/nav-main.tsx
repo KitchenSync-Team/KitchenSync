@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ChevronRight } from "lucide-react"
 
-import { getSidebarIcon, type SidebarIconKey } from "@/components/sidebar-icons"
+import { getSidebarIcon, type SidebarIconKey } from "@/components/navigation/sidebar-icons"
 import {
   Collapsible,
   CollapsibleContent,

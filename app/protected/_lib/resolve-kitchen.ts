@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import {
   MissingKitchenError,
   loadKitchenData,
-} from "@/lib/kitchen";
+} from "@/lib/domain/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
 export async function resolveKitchen() {

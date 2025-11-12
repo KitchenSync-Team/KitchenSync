@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { createClient } from '@/lib/client';
+import { createClient } from '@/lib/supabase/client';
 
 type Option = { id: string | number; name: string };
 

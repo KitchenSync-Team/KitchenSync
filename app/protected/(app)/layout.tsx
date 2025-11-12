@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
-import { AppSidebar } from "@/components/app-sidebar";
-import type { NavMainItem } from "@/components/nav-main";
-import type { NavUserData } from "@/components/nav-user";
+import { AppSidebar } from "@/components/navigation/app-sidebar";
+import type { NavMainItem } from "@/components/navigation/nav-main";
+import type { NavUserData } from "@/components/navigation/nav-user";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default async function ProtectedAppLayout({

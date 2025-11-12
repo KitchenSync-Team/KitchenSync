@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/supabase/utils"
 
 type MeasurementUnitsCardProps = {
   unitsSystem: "imperial" | "metric"
