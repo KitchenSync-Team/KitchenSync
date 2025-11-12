@@ -28,9 +28,18 @@ const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024
 type AvatarUploaderProps = {
   currentAvatarUrl: string | null
   fallbackText: string
+  refreshOnSuccess?: boolean
+  onUploadSuccess?: (blob: Blob) => void
+  triggerLabel?: string
 }
 
-export function AvatarUploader({ currentAvatarUrl, fallbackText }: AvatarUploaderProps) {
+export function AvatarUploader({
+  currentAvatarUrl,
+  fallbackText,
+  refreshOnSuccess = true,
+  onUploadSuccess,
+  triggerLabel = "Change avatar",
+}: AvatarUploaderProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
@@ -166,11 +175,14 @@ export function AvatarUploader({ currentAvatarUrl, fallbackText }: AvatarUploade
         toast.success("Avatar updated", {
           description: "Your new profile photo is live.",
         })
+        onUploadSuccess?.(blob)
         setOpen(false)
         setSelectedImageUrl(null)
         setCroppedAreaPixels(null)
         setPreviewUrl(null)
-        router.refresh()
+        if (refreshOnSuccess) {
+          router.refresh()
+        }
       }
     } catch (error) {
       toast.error("Avatar upload failed", {
@@ -185,7 +197,7 @@ export function AvatarUploader({ currentAvatarUrl, fallbackText }: AvatarUploade
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          Change avatar
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="w-full max-w-[90vw] lg:max-w-4xl">

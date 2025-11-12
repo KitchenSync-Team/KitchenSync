@@ -111,6 +111,7 @@ export default async function OnboardingPage() {
     firstName: kitchenData.user.firstName ?? "",
     lastName: kitchenData.user.lastName ?? "",
     sex: kitchenData.user.sex ?? "",
+    avatarUrl: kitchenData.user.avatarUrl ?? null,
   };
 
   const initialPreferences = {

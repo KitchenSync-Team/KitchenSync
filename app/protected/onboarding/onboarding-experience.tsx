@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { OnboardingForm } from "@/app/protected/onboarding/onboarding-form";
 
@@ -21,6 +21,13 @@ type ProfileSnapshot = {
   firstName: string | null;
   lastName: string | null;
   sex: string | null;
+  avatarUrl: string | null;
+};
+
+type ProfilePreview = {
+  firstName: string;
+  lastName: string;
+  sex: string | undefined;
 };
 
 type PreferenceSnapshot = {
@@ -72,12 +79,21 @@ export function OnboardingExperience({
     [initialProfile, userDisplayName],
   );
 
-  const [previewFirstName, setPreviewFirstName] = useState(fallbackFirstName);
+  const [profilePreview, setProfilePreview] = useState<ProfilePreview | null>(null);
+  const [hasPreview, setHasPreview] = useState(false);
 
-  const effectiveFirstName = previewFirstName.trim().length > 0
-    ? previewFirstName.trim()
-    : fallbackFirstName.trim();
-  const greetingName = effectiveFirstName.length > 0 ? effectiveFirstName : null;
+  const trimmedFallback = fallbackFirstName.trim();
+  const previewFirstName = profilePreview?.firstName?.trim() ?? "";
+  const greetingName = previewFirstName.length > 0
+    ? previewFirstName
+    : !hasPreview && trimmedFallback.length > 0
+      ? trimmedFallback
+      : null;
+
+  const handleProfilePreviewChange = useCallback((preview: ProfilePreview) => {
+    setProfilePreview(preview);
+    setHasPreview(true);
+  }, []);
 
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-10 py-12">
@@ -97,9 +113,7 @@ export function OnboardingExperience({
         initialCustomLocations={initialCustomLocations}
         initialProfile={initialProfile}
         initialPreferences={initialPreferences}
-        onProfilePreviewChangeAction={({ firstName }) => {
-          setPreviewFirstName(firstName);
-        }}
+        onProfilePreviewChangeAction={handleProfilePreviewChange}
       />
     </section>
   );

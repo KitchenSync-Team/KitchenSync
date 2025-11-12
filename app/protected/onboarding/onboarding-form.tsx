@@ -1,11 +1,12 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useTheme } from "next-themes";
 
 import { LocationPlanner } from "@/components/onboarding/location-planner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/supabase/utils";
+
+import { AvatarUploader } from "@/components/profile/avatar-uploader";
 
 import { toast } from "sonner";
 import {
@@ -86,6 +89,7 @@ type OnboardingFormProps = {
     firstName: string | null;
     lastName: string | null;
     sex: string | null;
+    avatarUrl: string | null;
   };
   initialPreferences: {
     dietaryPreferences: string[];
@@ -146,6 +150,35 @@ const sanitizeSexValue = (value: string | null): string | undefined => {
 
   const allowedValues = new Set(SEX_OPTIONS.map((option) => option.value));
   return allowedValues.has(trimmed) ? trimmed : undefined;
+};
+
+const deriveAvatarInitials = (
+  firstName: string,
+  lastName: string,
+  fallbackName: string | null,
+) => {
+  const parts: string[] = [];
+  const trimmedFirst = firstName.trim();
+  const trimmedLast = lastName.trim();
+
+  if (trimmedFirst) {
+    parts.push(trimmedFirst);
+  }
+  if (trimmedLast) {
+    parts.push(trimmedLast);
+  }
+
+  if (parts.length === 0 && fallbackName) {
+    parts.push(...fallbackName.trim().split(/\s+/).filter(Boolean));
+  }
+
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+
+  return initials || "KS";
 };
 
 export function OnboardingForm({
@@ -215,6 +248,8 @@ export function OnboardingForm({
 
   const [stepIndex, setStepIndex] = useState(0);
   const totalSteps = STEP_DETAILS.length;
+  const tempAvatarUrlRef = useRef<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialProfile.avatarUrl ?? null);
 
   const [firstName, setFirstName] = useState(initialProfile.firstName ?? "");
   const [lastName, setLastName] = useState(initialProfile.lastName ?? "");
@@ -244,6 +279,30 @@ export function OnboardingForm({
   const initialLocale = initialPreferences.locale ?? "en-US";
   const initialPushOptIn = initialPreferences.pushOptIn ?? false;
   const [locationSummary, setLocationSummary] = useState({ total: 0, defaults: 0, customs: 0 });
+  const cardGreetingName = useMemo(() => {
+    const trimmedFirst = firstName.trim();
+    if (trimmedFirst.length > 0) {
+      return trimmedFirst;
+    }
+    const trimmedLast = lastName.trim();
+    if (trimmedLast.length > 0) {
+      return trimmedLast;
+    }
+    return "";
+  }, [firstName, lastName]);
+
+  useEffect(() => {
+    return () => {
+      if (tempAvatarUrlRef.current) {
+        URL.revokeObjectURL(tempAvatarUrlRef.current);
+        tempAvatarUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setAvatarUrl(initialProfile.avatarUrl ?? null);
+  }, [initialProfile.avatarUrl]);
 
   const handleLocationSummaryChange = useCallback(
     (summary: { total: number; defaults: number; customs: number }) => {
@@ -428,6 +487,15 @@ export function OnboardingForm({
     });
   }, []);
 
+  const handleAvatarUploadSuccess = useCallback((blob: Blob) => {
+    const nextUrl = URL.createObjectURL(blob);
+    if (tempAvatarUrlRef.current) {
+      URL.revokeObjectURL(tempAvatarUrlRef.current);
+    }
+    tempAvatarUrlRef.current = nextUrl;
+    setAvatarUrl(nextUrl);
+  }, []);
+
   const handleFormSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       if (profileIssues.length > 0) {
@@ -450,6 +518,11 @@ export function OnboardingForm({
 
   const submitDisabled = locationSummary.total === 0;
   const themeValue = currentTheme ?? "system";
+  const avatarFallbackText = useMemo(
+    () => deriveAvatarInitials(firstName, lastName, userName ?? null),
+    [firstName, lastName, userName],
+  );
+  const avatarAltText = userName ? `${userName}'s avatar` : "Your avatar";
 
   return (
     <form action={dispatchOnboarding} onSubmit={handleFormSubmit} className="space-y-6">
@@ -508,8 +581,8 @@ export function OnboardingForm({
             <div className="space-y-1">
               <CardTitle>About you</CardTitle>
               <CardDescription>
-                {userName
-                  ? `Welcome, ${userName}! Update anything we should know about you.`
+                {cardGreetingName
+                  ? `Welcome, ${cardGreetingName}! Update anything we should know about you.`
                   : "Let your collaborators know who they’re cooking with."}
               </CardDescription>
             </div>
@@ -519,69 +592,92 @@ export function OnboardingForm({
               </div>
             ) : null}
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First name</Label>
-                <Input
-                  id="firstName"
-                  name="firstName-controlled"
-                  placeholder="Jordan"
-                  value={firstName}
-                  onChange={(event) => {
-                    setFirstName(event.target.value);
-                  }}
-                  maxLength={120}
-                  autoComplete="given-name"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last name</Label>
-                <Input
-                  id="lastName"
-                  name="lastName-controlled"
-                  placeholder="Morgan"
-                  value={lastName}
-                  onChange={(event) => {
-                    setLastName(event.target.value);
-                  }}
-                  maxLength={120}
-                  autoComplete="family-name"
-                  required
+          <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div className="flex flex-col items-center justify-center gap-6 rounded-lg bg-muted/30 p-6">
+              <div className="flex flex-col items-center gap-4">
+                <Avatar className="size-40">
+                  {avatarUrl ? (
+                    <AvatarImage
+                      key={avatarUrl}
+                      src={avatarUrl}
+                      alt={avatarAltText}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                  <AvatarFallback className="text-4xl font-semibold">{avatarFallbackText}</AvatarFallback>
+                </Avatar>
+                <AvatarUploader
+                  currentAvatarUrl={avatarUrl}
+                  fallbackText={avatarFallbackText}
+                  refreshOnSuccess={false}
+                  onUploadSuccess={handleAvatarUploadSuccess}
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sex">How do you describe yourself?</Label>
-              <Select
-                value={sex}
-                onValueChange={(value) => {
-                  setSex(value);
-                }}
-              >
-                <SelectTrigger
-                  id="sex"
-                  name="sex-controlled"
-                  className="focus-visible:border-emerald-500 focus-visible:ring-emerald-500/40"
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First name</Label>
+                  <Input
+                    id="firstName"
+                    name="firstName-controlled"
+                    placeholder="Jordan"
+                    value={firstName}
+                    onChange={(event) => {
+                      setFirstName(event.target.value);
+                    }}
+                    maxLength={120}
+                    autoComplete="given-name"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last name</Label>
+                  <Input
+                    id="lastName"
+                    name="lastName-controlled"
+                    placeholder="Morgan"
+                    value={lastName}
+                    onChange={(event) => {
+                      setLastName(event.target.value);
+                    }}
+                    maxLength={120}
+                    autoComplete="family-name"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sex">How do you describe yourself?</Label>
+                <Select
+                  value={sex}
+                  onValueChange={(value) => {
+                    setSex(value);
+                  }}
                 >
-                  <SelectValue placeholder="Select an option" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SEX_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="data-[state=checked]:bg-emerald-500/10 data-[state=checked]:text-emerald-700 dark:data-[state=checked]:bg-emerald-500/20 dark:data-[state=checked]:text-emerald-200"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Pick the option that fits best&mdash;choose &quot;Prefer not to say&quot; if you don&apos;t want to share.
-              </p>
+                  <SelectTrigger
+                    id="sex"
+                    name="sex-controlled"
+                    className="focus-visible:border-emerald-500 focus-visible:ring-emerald-500/40"
+                  >
+                    <SelectValue placeholder="Select an option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEX_OPTIONS.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        className="data-[state=checked]:bg-emerald-500/10 data-[state=checked]:text-emerald-700 dark:data-[state=checked]:bg-emerald-500/20 dark:data-[state=checked]:text-emerald-200"
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Pick the option that fits best&mdash;choose &quot;Prefer not to say&quot; if you don&apos;t want to share.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
