@@ -1,64 +1,39 @@
 # KitchenSync
 
-KitchenSync helps kitchens stay on top of pantry inventory, expirations, receipts, and shared cooking activity. Authenticated users land in a protected dashboard that highlights what needs attention so ingredients get used before they go to waste.
-
-The original Next.js + Supabase starter guide is preserved in [`docs/reference/nextjs-supabase-starter.md`](docs/reference/nextjs-supabase-starter.md) if you need it.
+KitchenSync helps households and shared kitchens stay on top of pantry inventory, expirations, receipts, and user preferences. Authenticated users land inside a protected workspace anchored by the sidebar shell; unauthenticated visitors stay on the marketing landing page.
 
 ## Highlights
 
-- **Kitchens & members** – each user belongs to a kitchen with locations, collaborators, and row-level access controls.
-- **Inventory intelligence** – dashboard cards surface total items, upcoming expirations, active alerts, and recent receipts.
-- **Onboarding guardrails** – new users confirm profile details, theme/units, communication preferences, and storage locations before seeing the dashboard.
-- **Supabase-first auth** – server components verify sessions and redirect unauthenticated visitors to the login flow.
-
-## Onboarding Journey
-
-When a new user signs in, KitchenSync guides them through three quick steps:
-
-1. **Introduce yourself** – confirm name/pronouns and choose preferences such as theme, measurement units, and whether to receive product updates or personalized tips.
-2. **Personalize KitchenSync** – flag any dietary styles and allergens so the experience can highlight relevant items.
-3. **Set up your kitchen** – name the kitchen and enable at least one storage location (Pantry, Fridge, Freezer, etc.) to unlock the dashboard.
-
-These guardrails ensure every account has sensible defaults before team members start collaborating.
+- **Supabase-first auth & data** – Edge middleware plus `lib/domain/kitchen.ts` keep every protected route in sync with Supabase sessions and row-level security.
+- **Onboarding guardrails** – New members confirm profile details, dietary styles, allergens, communication prefs, and storage locations before reaching the dashboard.
+- **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, measurement units, and avatars (cropped + uploaded to S3/Supabase Storage).
+- **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
 
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router, Server Components, Turbopack dev server)
-- **Styling**: Tailwind CSS + shadcn/ui primitives
-- **Data & Auth**: Supabase (Postgres, Auth, Storage) with helpers in `lib/supabase`
-- **Runtime**: TypeScript, ESLint
-- **Hosting**: Vercel (preview deploys on PRs, production on `main`)
+- **Styling**: Tailwind CSS + shadcn/ui wrappers
+- **Data/Auth**: Supabase (Auth, Postgres, Storage)
+- **Storage**: Supabase S3-compatible bucket for avatars (signed URLs generated server-side)
+- **Tooling**: TypeScript, ESLint, npm
+- **Hosting**: Vercel (preview per PR, production on `main`)
 
-## Repo Structure
+## Repository Structure
 
-- `app/`
-  - `page.tsx` – marketing landing page
-  - `auth/` – login, sign-up, password reset routes
-  - `protected/`
-    - `(app)/layout.tsx` – guards auth, wraps children in the shared sidebar skeleton
-    - `(app)/page.tsx` – main dashboard placeholder
-    - `(app)/profile`, `(app)/kitchen-settings`, `(app)/settings` – additional authenticated pages (placeholders)
-    - `onboarding/` – server-rendered onboarding flow
-- `components/`
-  - `app-sidebar.tsx` plus `nav-*.tsx` – shadcn sidebar block primitives
-  - `ui/` – shared shadcn/ui wrappers (`button`, `card`, etc.)
-  - Auth helpers and form components (`auth-button.tsx`, `login-form.tsx`, …)
-- `lib/` – Supabase client helpers, kitchen data loaders, domain utilities
-- `docs/` – supplemental documentation and archival reference material
-- `public/` – static assets (icons, Open Graph images, etc.)
+### Components philosophy
+- Shared atoms live in `components/ui`. They wrap Radix/shadcn primitives with Tailwind styling and export PascalCase components.
+- Feature bundles (`components/profile`, `components/onboarding`, etc.) own their larger composite pieces and export only what their route segments need.
+- Root-level helpers were reorganized into themed folders (`auth`, `navigation`, `modals`, `theme`) to keep usage discoverable.
 
-## Component Organization & Naming
+### lib/ philosophy
+- `lib/domain/` contains data loaders/aggregators (currently `kitchen.ts`).
+- `lib/supabase/` houses client factories, middleware helpers, and shared utilities.
+- `lib/storage/` and `lib/image/` encapsulate S3 + canvas logic so routes/components stay lean.
 
-- Keep feature-aware code in folders under `components/` (for example `onboarding/`) and export a named React component from each file (PascalCase function matching the UI).
-- File names stay lowercase dash-separated (or a single word) to mirror the component they expose, with non-visual helpers using `.ts` instead of `.tsx` when appropriate.
-- Shared UI primitives derived from shadcn/ui live in `components/ui/`; each file wraps the primitive, exports a PascalCase component, and re-exports helper variants as needed.
-- The shared sidebar lives in `components/app-sidebar.tsx` with helper menus under `components/nav-*.tsx`.
-- Interactive components that rely on client-side hooks include the `"use client"` directive at the top of the file for consistency.
-
-## Getting Started
+## Development Setup
 
 1. **Prerequisites**
-   - Node.js 20 (use `nvm install 20 && nvm use 20`)
+   - Node.js 20 (`nvm install 20 && nvm use 20` recommended)
    - npm (bundled with Node)
    - Supabase + Vercel access for environment variables
 
@@ -69,37 +44,53 @@ These guardrails ensure every account has sensible defaults before team members 
    npm install
    ```
 
-3. **Configure environment**
+3. **Environment variables**
    ```bash
    cp .env.example .env.local
    ```
-   Fill in:
+   Fill in at least:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (match anon key)
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
-   - Optional: `NEXT_PUBLIC_SITE_URL` for auth redirects
-   
-   Use your Supabase project dashboard (`Project Settings → API`) to copy the Project URL, anon key, and service role key into the matching variables. If you deploy to Vercel, set `NEXT_PUBLIC_SITE_URL` (and the other public keys) in the Vercel dashboard under `Project Settings → Environment Variables`; for local work you can leave it unset or point to your desired base URL.
+   - `S3_AVATARS_*` variables if you plan to test avatar uploads locally
 
-4. **Run & validate**
+4. **Run & lint**
    ```bash
    npm run dev    # http://localhost:3000
-   npm run lint   # optional: static analysis
-   npm run build  # optional: production build check
+   npm run lint   # static analysis
+   npm run build  # optional production check
    ```
-   Sign up through the local app to confirm Supabase Auth and the protected dashboard work end-to-end.
 
-## Working in the Repo
+5. **Supabase database**
+   - Link the repo to your Supabase project (or request access to the shared instance).
+   - Apply migrations from `supabase/migrations/` if/when they exist (`supabase db push` or run the SQL via the dashboard).
 
-- Keep shared authenticated UI minimal in `components/app-sidebar.tsx` and the accompanying `nav-*` helpers; extend them as needed for your product surface.
-- Access Supabase via helpers in `lib/supabase` or domain utilities like `lib/kitchen.ts` to stay RLS-safe.
-- Sidebar palette tokens live alongside the global Tailwind config in `app/globals.css`.
-- The marketing site and dashboard each have their own route groups under `app/`, but everything shares the global `layout.tsx`.
+## Scripts
 
-## Contributing
+| Command         | Purpose                              |
+|-----------------|--------------------------------------|
+| `npm run dev`   | Start Next.js dev server (Turbopack) |
+| `npm run build` | Production build / type check        |
+| `npm run lint`  | ESLint (Next.js config)              |
 
-- Follow the branching guidelines in [`CONTRIBUTING.md`](CONTRIBUTING.md) and keep feature branches rebased on `main`.
-- Run `npm run lint` (and ideally `npm run build`) before opening a PR.
-- Vercel automatically builds a preview for every PR; production deploys track the `main` branch.
+## Testing Avatars Locally
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for upcoming work. Historical starter documentation and additional guides live in the `docs/` directory.
+1. Set the `S3_AVATARS_*` env vars (`*_REGION`, `*_ENDPOINT`, `*_ACCESS_KEY`, `*_SECRET_KEY`, `*_BUCKET`).
+2. Ensure the bucket allows the project credentials to `PutObject`/`DeleteObject`.
+3. Run `npm run dev` and navigate to `/protected/profile` → Change avatar.
+4. On upload, the API stores only the object key; `lib/domain/kitchen` signs a URL for display.
+
+## Contributing & Deployment
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for:
+- Branch naming conventions and PR expectations
+- Vercel preview & production deployment flow
+- Hotfix protocol
+- Supabase migration workflow
+
+Every PR automatically receives a Vercel preview URL; merging to `main` deploys production. Keep `main` deployable at all times.
+
+## Questions?
+
+Open an issue, start a GitHub discussion, or drop a note in team chat. Contributions are welcome—just follow the branching & PR process documented in `CONTRIBUTING.md`.
