@@ -27,9 +27,9 @@ export async function getCroppedAvatarBlob(
   const image = await loadImage(imageSrc);
   const canvas = document.createElement("canvas");
 
-  const outputWidth = options?.outputWidth ?? 512;
-  canvas.width = outputWidth;
-  canvas.height = outputWidth;
+  const size = options?.outputWidth ?? 512;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext("2d");
 
   if (!ctx) {

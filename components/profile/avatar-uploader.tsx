@@ -159,17 +159,19 @@ export function AvatarUploader({ currentAvatarUrl, fallbackText }: AvatarUploade
       const result = await response.json().catch(() => null)
 
       if (!response.ok || !result?.success) {
-        throw new Error(result?.error ?? "We couldn’t update your avatar.")
+        toast.error("Avatar upload failed", {
+          description: result?.error ?? "We couldn’t update your avatar.",
+        })
+      } else {
+        toast.success("Avatar updated", {
+          description: "Your new profile photo is live.",
+        })
+        setOpen(false)
+        setSelectedImageUrl(null)
+        setCroppedAreaPixels(null)
+        setPreviewUrl(null)
+        router.refresh()
       }
-
-      toast.success("Avatar updated", {
-        description: "Your new profile photo is live.",
-      })
-      setOpen(false)
-      setSelectedImageUrl(null)
-      setCroppedAreaPixels(null)
-      setPreviewUrl(null)
-      router.refresh()
     } catch (error) {
       toast.error("Avatar upload failed", {
         description: error instanceof Error ? error.message : "Please try again.",

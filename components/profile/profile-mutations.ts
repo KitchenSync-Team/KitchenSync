@@ -32,7 +32,7 @@ function buildUniqueList(values: string[] | undefined, allowed: Set<string>) {
   return Array.from(
     new Set(
       (values ?? [])
-        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .map((value) => value.trim())
         .filter((value) => value.length > 0 && allowed.has(value)),
     ),
   )
