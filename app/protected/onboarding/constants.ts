@@ -33,8 +33,8 @@ export const ALLERGEN_OPTIONS: readonly OnboardingOption[] = [
 ] as const;
 
 export const CUISINE_PREFERENCE_OPTIONS: readonly OnboardingOption[] = [
-  { value: "american_comfort", label: "American comfort" },
-  { value: "bbq_smokehouse", label: "BBQ & smokehouse" },
+  { value: "american_comfort", label: "American Comfort" },
+  { value: "bbq_smokehouse", label: "BBQ & Smokehouse" },
   { value: "caribbean", label: "Caribbean" },
   { value: "chinese", label: "Chinese" },
   { value: "french", label: "French" },

@@ -58,7 +58,7 @@ export default async function ProfilePage() {
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">User preferences</h2>
           <p className="text-sm text-muted-foreground">
-            Set dietary boundaries, favourite cuisines, and measurement units for tailored experiences.
+            Set dietary boundaries, favorite cuisines, and measurement units for tailored experiences.
           </p>
         </div>
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">

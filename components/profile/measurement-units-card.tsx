@@ -30,7 +30,7 @@ const unitOptions = [
   {
     value: "metric" as const,
     title: "Metric",
-    description: "Litres, grams, kilograms",
+    description: "Liters, grams, kilograms",
   },
 ]
 

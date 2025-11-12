@@ -106,7 +106,7 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions }: Cuis
       <CardContent className="space-y-6">
         <section className="space-y-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">Favourites</p>
+            <p className="text-sm font-medium text-foreground">Favorites</p>
             <p className="text-xs text-muted-foreground">
               We’ll spotlight recipes and meal ideas from these cuisines.
             </p>
@@ -161,7 +161,7 @@ export function CuisinePreferencesCard({ likes, dislikes, cuisineOptions }: Cuis
         </section>
 
         <p className="text-xs text-muted-foreground">
-          Marking a cuisine as a favourite automatically removes it from the skip list to avoid conflicts.
+          Marking a cuisine as a favorite automatically removes it from the skip list to avoid conflicts.
         </p>
       </CardContent>
       <CardFooter className="flex justify-end gap-2">

@@ -386,7 +386,7 @@ export function ProfileCard({
                   onCheckedChange={setEmailUpdates}
                 />
                 <PreferenceSwitch
-                  title="Personalised suggestions"
+                  title="Personalized suggestions"
                   description="Tailor recipe and inventory tips using your kitchen data."
                   checked={personalizedSuggestions}
                   onCheckedChange={setPersonalizedSuggestions}
