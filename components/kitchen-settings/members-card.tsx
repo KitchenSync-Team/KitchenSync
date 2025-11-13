@@ -181,9 +181,7 @@ export function MembersCard({
 
   const canRemoveMember = (member: KitchenMember) => {
     if (currentUserRole !== "owner") return false;
-    if (member.role === "owner" && currentUserRole !== "owner") return false;
     if (member.role === "owner" && ownerCount <= 1) return false;
-    if (member.userId === currentUserId && member.role === "owner" && ownerCount <= 1) return false;
     return member.userId !== currentUserId || ownerCount > 1;
   };
 
