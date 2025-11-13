@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 
@@ -131,6 +131,7 @@ function KitchenIdentityCard({
     renameKitchen,
     defaultKitchenSettingsState,
   );
+  const [isApplyingIcon, startApplyingIcon] = useTransition();
   const lastHandledStatus = useRef<"idle" | "success" | "error">("idle");
   const activeOption =
     kitchenIconOptions.find((option) => option.id === iconKey) ?? kitchenIconOptions[0];
@@ -138,6 +139,30 @@ function KitchenIdentityCard({
   const trimmedName = name.trim();
   const nothingChanged = trimmedName === initialKitchenName.trim() && iconKey === initialKitchenIconKey;
   const disableSave = trimmedName.length === 0 || nothingChanged;
+
+  const submitIdentity = useCallback(
+    (override?: { name?: string; icon?: KitchenIconId }) => {
+      const targetName = override?.name ?? name;
+      const persistedName = targetName.trim().length > 0 ? targetName.trim() : initialKitchenName;
+      const targetIcon = override?.icon ?? iconKey;
+      const formData = new FormData();
+      formData.append("kitchenId", kitchenId);
+      formData.append("kitchenName", persistedName);
+      formData.append("iconKey", targetIcon);
+      formAction(formData);
+    },
+    [formAction, iconKey, initialKitchenName, kitchenId, name],
+  );
+
+  const handleApplyIcon = useCallback(
+    (nextIcon: KitchenIconId) => {
+      setIconKey(nextIcon);
+      startApplyingIcon(() => {
+        submitIdentity({ icon: nextIcon });
+      });
+    },
+    [submitIdentity],
+  );
 
   useEffect(() => {
     if (state.status === "success" && lastHandledStatus.current !== "success") {
@@ -170,10 +195,17 @@ function KitchenIdentityCard({
               <div className="flex size-24 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
                 <ActiveIcon className="size-10" />
               </div>
-              <KitchenIconSelector value={iconKey} onChange={setIconKey} />
+              <KitchenIconSelector
+                value={iconKey}
+                onChange={setIconKey}
+                onApplyIcon={handleApplyIcon}
+                isApplyingIcon={isApplyingIcon}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="kitchenName-input">Kitchen name</Label>
+            <div className="flex flex-col items-center space-y-2 text-center lg:items-start lg:text-left">
+              <Label htmlFor="kitchenName-input" className="w-full max-w-sm text-left">
+                Kitchen name
+              </Label>
               <Input
                 id="kitchenName-input"
                 name="kitchenName"
@@ -181,24 +213,22 @@ function KitchenIdentityCard({
                 onChange={(event) => setName(event.target.value.slice(0, 120))}
                 placeholder="The Swartz Kitchen"
                 maxLength={120}
+                className="w-full max-w-sm"
               />
+              <div className="flex w-full max-w-sm flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={trimmedName === initialKitchenName.trim()}
+                  onClick={() => setName(initialKitchenName)}
+                >
+                  Reset
+                </Button>
+                <CardSubmitButton label="Save name" disabled={disableSave} />
+              </div>
             </div>
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={nothingChanged}
-            onClick={() => {
-              setName(initialKitchenName);
-              setIconKey(initialKitchenIconKey);
-            }}
-          >
-            Reset
-          </Button>
-          <CardSubmitButton label="Save name" disabled={disableSave} />
-        </CardFooter>
       </form>
     </Card>
   );
@@ -207,9 +237,11 @@ function KitchenIdentityCard({
 type KitchenIconSelectorProps = {
   value: KitchenIconId;
   onChange: (value: KitchenIconId) => void;
+  onApplyIcon?: (value: KitchenIconId) => void;
+  isApplyingIcon?: boolean;
 };
 
-function KitchenIconSelector({ value, onChange }: KitchenIconSelectorProps) {
+function KitchenIconSelector({ value, onChange, onApplyIcon, isApplyingIcon }: KitchenIconSelectorProps) {
   const [open, setOpen] = useState(false);
   const [pendingIcon, setPendingIcon] = useState<KitchenIconId>(value);
 
@@ -270,17 +302,24 @@ function KitchenIconSelector({ value, onChange }: KitchenIconSelectorProps) {
               setOpen(false);
               setPendingIcon(value);
             }}
+            disabled={isApplyingIcon}
           >
             Cancel
           </Button>
           <Button
             type="button"
+            disabled={pendingIcon === value || Boolean(isApplyingIcon)}
             onClick={() => {
+              if (pendingIcon === value) {
+                setOpen(false);
+                return;
+              }
               onChange(pendingIcon);
+              onApplyIcon?.(pendingIcon);
               setOpen(false);
             }}
           >
-            Use icon
+            {isApplyingIcon ? "Saving…" : "Use icon"}
           </Button>
         </DialogFooter>
       </DialogContent>
