@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Check, ChefHat, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown } from "lucide-react"
 
 import { NavMain, type NavMainItem } from "@/components/navigation/nav-main"
 import { NavUser, type NavUserData } from "@/components/navigation/nav-user"
@@ -23,16 +23,19 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { getKitchenIcon, type KitchenIconId } from "@/components/navigation/kitchen-icons"
 
 type KitchenOption = {
   id: string
   name: string
   href?: string
   isActive?: boolean
+  iconKey?: KitchenIconId
 }
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   kitchenName: string
+  kitchenIconKey?: KitchenIconId
   kitchenMeta?: string | null
   kitchenOptions?: KitchenOption[]
   navMain: NavMainItem[]
@@ -41,6 +44,7 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 
 export function AppSidebar({
   kitchenName,
+  kitchenIconKey,
   kitchenMeta,
   kitchenOptions,
   navMain,
@@ -50,9 +54,10 @@ export function AppSidebar({
   const options =
     kitchenOptions && kitchenOptions.length > 0
       ? kitchenOptions
-      : [{ id: "active", name: kitchenName, isActive: true }]
+      : [{ id: "active", name: kitchenName, isActive: true, iconKey: kitchenIconKey }]
 
   const activeKitchen = options.find((option) => option.isActive) ?? options[0]!
+  const ActiveIcon = getKitchenIcon(activeKitchen.iconKey ?? kitchenIconKey)
 
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
@@ -63,7 +68,7 @@ export function AppSidebar({
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent/60">
                   <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                    <ChefHat className="size-4" />
+                    <ActiveIcon className="size-4" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{activeKitchen.name}</span>

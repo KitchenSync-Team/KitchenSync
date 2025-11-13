@@ -5,6 +5,7 @@ import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import type { NavMainItem } from "@/components/navigation/nav-main";
 import type { NavUserData } from "@/components/navigation/nav-user";
+import { defaultKitchenIconId, isKitchenIconId } from "@/components/navigation/kitchen-icons";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default async function ProtectedAppLayout({
@@ -58,12 +59,15 @@ export default async function ProtectedAppLayout({
     avatarUrl: user.avatarUrl ?? undefined,
   };
 
+  const kitchenIconKey = isKitchenIconId(kitchen.iconKey) ? kitchen.iconKey : defaultKitchenIconId;
+
   const kitchenOptions = [
     {
       id: kitchen.id,
       name: kitchen.name,
       href: "/protected/kitchen-settings",
       isActive: true,
+      iconKey: kitchenIconKey,
     },
   ];
 
@@ -71,6 +75,7 @@ export default async function ProtectedAppLayout({
     <SidebarProvider defaultOpen={defaultOpen}>
       <AppSidebar
         kitchenName={kitchen.name}
+        kitchenIconKey={kitchenIconKey}
         kitchenMeta={kitchenMeta}
         kitchenOptions={kitchenOptions}
         navMain={navMain}

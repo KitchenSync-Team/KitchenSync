@@ -2,9 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  dedupeLocations,
+  extractLocationsFromFormData,
+  syncKitchenLocations,
+} from "@/app/protected/_lib/kitchen-location-utils";
 
 import {
   ALLERGEN_OPTIONS,
@@ -15,13 +19,6 @@ import {
   SEX_OPTIONS,
 } from "./constants";
 import { defaultOnboardingState, type OnboardingActionState } from "./action-state";
-
-const locationSchema = z.object({
-  name: z.string().min(1),
-  icon: z.string().min(1).optional().nullable(),
-  order: z.coerce.number().nonnegative().catch(0),
-  source: z.enum(["default", "custom"]).optional(),
-});
 
 export async function completeOnboarding(
   _prevState: OnboardingActionState | undefined,
@@ -145,28 +142,7 @@ export async function completeOnboarding(
     const pushOptInRaw = formData.get("pushOptIn");
     const pushOptIn = pushOptInRaw === "true";
 
-    const rawLocations = formData.getAll("locationsPayload");
-    const parsedLocations = rawLocations
-      .map((raw) => {
-        if (typeof raw !== "string" || raw.trim().length === 0) {
-          return null;
-        }
-
-        try {
-          const value = locationSchema.parse(JSON.parse(raw));
-          return {
-            name: value.name.trim(),
-            icon: value.icon ?? null,
-            order: Number.isFinite(value.order) ? value.order : 0,
-          };
-        } catch {
-          return null;
-        }
-      })
-      .filter(
-        (location): location is { name: string; icon: string | null; order: number } =>
-          Boolean(location && location.name.length > 0),
-      );
+    const parsedLocations = extractLocationsFromFormData(formData);
 
     if (parsedLocations.length === 0) {
       return {
@@ -175,17 +151,7 @@ export async function completeOnboarding(
       };
     }
 
-    parsedLocations.sort((a, b) => a.order - b.order);
-
-    const seenNames = new Set<string>();
-    const uniqueLocations = parsedLocations.filter((location) => {
-      const key = location.name.toLowerCase();
-      if (seenNames.has(key)) {
-        return false;
-      }
-      seenNames.add(key);
-      return true;
-    });
+    const uniqueLocations = dedupeLocations(parsedLocations);
 
     const normalizedFirstName = firstName.length > 0 ? firstName : null;
     const normalizedLastName = lastName.length > 0 ? lastName : null;
@@ -237,97 +203,19 @@ export async function completeOnboarding(
       };
     }
 
-    const { data: existingLocations, error: loadLocationsError } = await supabase
-      .from("locations")
-      .select("id, name")
-      .eq("kitchen_id", kitchenId);
-
-    if (loadLocationsError) {
+    if (uniqueLocations.length === 0) {
       return {
         status: "error",
-        error: loadLocationsError.message ?? "We couldn’t load existing locations.",
+        error: LOCATION_REQUIRED_ERROR_MESSAGE,
       };
     }
 
-    const existingMap = new Map(
-      (existingLocations ?? []).map((location) => [
-        location.name.trim().toLowerCase(),
-        location,
-      ]),
-    );
-
-    const upsertRows = uniqueLocations.map((location, index) => {
-      const key = location.name.trim().toLowerCase();
-      const match = existingMap.get(key);
-
+    const syncResult = await syncKitchenLocations(supabase, kitchenId, uniqueLocations);
+    if (!syncResult.success) {
       return {
-        id: match?.id,
-        kitchen_id: kitchenId,
-        name: location.name.trim(),
-        icon: location.icon,
-        is_default: index === 0,
-        sort_order: index,
+        status: "error",
+        error: syncResult.error ?? "We couldn’t update your locations.",
       };
-    });
-
-    const idsToKeep = new Set(
-      upsertRows
-        .map((row) => row.id)
-        .filter((value): value is string => typeof value === "string" && value.length > 0),
-    );
-
-    const locationsToRemove =
-      existingLocations?.filter((location) => !idsToKeep.has(location.id)) ?? [];
-
-    if (locationsToRemove.length > 0) {
-      const { error: deleteError } = await supabase
-        .from("locations")
-        .delete()
-        .in(
-          "id",
-          locationsToRemove.map((location) => location.id),
-        );
-
-      if (deleteError && deleteError.code !== "42501") {
-        return {
-          status: "error",
-          error: deleteError.message ?? "We couldn’t remove old locations.",
-        };
-      }
-    }
-
-    const updates = upsertRows.filter(
-      (row): row is typeof row & { id: string } =>
-        typeof row.id === "string" && row.id.length > 0,
-    );
-    const inserts = upsertRows
-      .filter((row) => !row.id)
-      .map((row) => ({
-        kitchen_id: row.kitchen_id,
-        name: row.name,
-        icon: row.icon,
-        is_default: row.is_default,
-        sort_order: row.sort_order,
-      }));
-
-    if (updates.length > 0) {
-      const { error: updateError } = await supabase.from("locations").upsert(updates);
-      if (updateError) {
-        return {
-          status: "error",
-          error: updateError.message ?? "We couldn’t update your locations.",
-        };
-      }
-    }
-
-    if (inserts.length > 0) {
-      const { error: insertError } = await supabase.from("locations").insert(inserts);
-      if (insertError) {
-        return {
-          status: "error",
-          error: insertError.message ?? "We couldn’t add your new locations.",
-        };
-      }
     }
 
     if (kitchenName.length > 0) {

@@ -1,44 +1,10 @@
 import { redirect } from "next/navigation";
 
-import {
-  MissingKitchenError,
-  loadKitchenData,
-  type LocationSummary,
-} from "@/lib/domain/kitchen";
+import { MissingKitchenError, loadKitchenData } from "@/lib/domain/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
+import { deriveLocationPlannerState } from "@/app/protected/_lib/location-presets";
 import { OnboardingExperience } from "./onboarding-experience";
-
-const LOCATION_SUGGESTIONS = [
-  {
-    value: "Pantry",
-    description: "Dry goods, snacks, and shelf-stable staples.",
-    icon: "boxes",
-  },
-  {
-    value: "Fridge",
-    description: "Fresh produce, dairy, and leftovers that need chilling.",
-    icon: "refrigerator",
-  },
-  {
-    value: "Freezer",
-    description: "Frozen meals, vegetables, and long-term storage.",
-    icon: "snowflake",
-  },
-  {
-    value: "Spice Rack",
-    description: "Seasonings, oils, and small jars you reach for often.",
-    icon: "sprout",
-  },
-] as const;
-
-function normalize(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function filterRealLocations(locations: LocationSummary[]) {
-  return locations.filter((location) => location.id !== "__unassigned");
-}
 
 export default async function OnboardingPage() {
   const supabase = await createClient();
@@ -80,32 +46,9 @@ export default async function OnboardingPage() {
   }
 
   const kitchen = kitchenData.kitchen;
-  const realLocations = filterRealLocations(kitchen.locations);
-  const normalizedExisting = new Map(
-    realLocations.map((location) => [normalize(location.name), location] as const),
+  const { defaultOptions, initialCustomLocations } = deriveLocationPlannerState(
+    kitchen.locations,
   );
-
-  const defaultOptions = LOCATION_SUGGESTIONS.map((option) => ({
-    value: option.value,
-    description: option.description,
-    icon: option.icon,
-    selected: normalizedExisting.has(normalize(option.value)),
-  }));
-
-  if (!defaultOptions.some((option) => option.selected)) {
-    for (const option of defaultOptions.slice(0, 3)) {
-      option.selected = true;
-    }
-  }
-
-  const defaultNames = new Set(defaultOptions.map((option) => normalize(option.value)));
-  const initialCustomLocations = realLocations
-    .filter((location) => !defaultNames.has(normalize(location.name)))
-    .map((location) => ({
-      id: location.id,
-      name: location.name,
-      icon: location.icon,
-    }));
 
   const initialProfile = {
     firstName: kitchenData.user.firstName ?? "",
