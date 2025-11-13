@@ -173,10 +173,8 @@ export function MembersCard({
 
   const canChangeRoleForMember = (member: KitchenMember) => {
     if (!canEditRoles) return false;
-    if (member.userId === currentUserId && member.role === "owner" && ownerCount <= 1) {
-      return false;
-    }
-    return true;
+    return !(member.userId === currentUserId && member.role === "owner" && ownerCount <= 1);
+
   };
 
   const canRemoveMember = (member: KitchenMember) => {
