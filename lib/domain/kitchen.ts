@@ -6,7 +6,6 @@ import { getAvatarBucketName, normalizeAvatarKey } from "@/lib/storage/avatar";
 type UpcomingInventoryUnitRow = {
   id: string;
   quantity: number | string | null;
-  uom: string | null;
   expires_at: string | null;
   items:
     | {
@@ -26,17 +25,26 @@ type UpcomingInventoryUnitRow = {
         name: string | null;
       }[]
     | null;
+  units:
+    | {
+        name: string | null;
+        abbreviation: string | null;
+      }
+    | {
+        name: string | null;
+        abbreviation: string | null;
+      }[]
+    | null;
 };
 
 type AlertRow = {
   id: string;
   type: string;
   alert_date: string;
-  inventory_units:
+  inventory:
     | {
         id: string;
         quantity: number | string | null;
-        uom: string | null;
         items:
           | {
               name: string | null;
@@ -51,13 +59,22 @@ type AlertRow = {
             }
           | {
               name: string | null;
+            }[]
+          | null;
+        units:
+          | {
+              name: string | null;
+              abbreviation: string | null;
+            }
+          | {
+              name: string | null;
+              abbreviation: string | null;
             }[]
           | null;
       }
     | {
         id: string;
         quantity: number | string | null;
-        uom: string | null;
         items:
           | {
               name: string | null;
@@ -72,6 +89,16 @@ type AlertRow = {
             }
           | {
               name: string | null;
+            }[]
+          | null;
+        units:
+          | {
+              name: string | null;
+              abbreviation: string | null;
+            }
+          | {
+              name: string | null;
+              abbreviation: string | null;
             }[]
           | null;
       }[]
@@ -88,6 +115,16 @@ type ProfileRow = {
   id: string;
   full_name: string | null;
   email: string | null;
+  avatar_url: string | null;
+};
+
+type InviteRow = {
+  id: string;
+  email: string | null;
+  role: string | null;
+  expires_at: string | null;
+  invited_by: string | null;
+  created_at: string | null;
 };
 
 function unwrapSingleRelation<T>(relation: T | T[] | null | undefined): T | null {
@@ -125,8 +162,19 @@ export type KitchenMember = {
   userId: string;
   name: Nullable<string>;
   email: Nullable<string>;
-  role: string;
+  role: "owner" | "member";
   joinedAt: Nullable<string>;
+  avatarUrl: Nullable<string>;
+};
+
+export type KitchenInviteSummary = {
+  id: string;
+  email: string;
+  role: "owner" | "editor" | "viewer";
+  expiresAt: Nullable<string>;
+  invitedByName: Nullable<string>;
+  invitedByEmail: Nullable<string>;
+  createdAt: Nullable<string>;
 };
 
 export type LocationSummary = {
@@ -190,6 +238,7 @@ export type KitchenSnapshot = {
   kitchen: {
     id: string;
     name: string;
+    iconKey: string;
     updatedAt: Nullable<string>;
     memberCount: number | null;
     members: KitchenMember[] | null;
@@ -200,6 +249,7 @@ export type KitchenSnapshot = {
   upcomingExpirations: ExpiringUnit[];
   activeAlerts: AlertSummary[];
   recentReceipts: ReceiptSummary[];
+  pendingInvites: KitchenInviteSummary[];
 };
 
 const UPCOMING_WINDOW_DAYS = 7;
@@ -364,7 +414,7 @@ export async function loadKitchenData(
 
   const { data: kitchen, error: kitchenError } = await supabase
     .from("kitchens")
-    .select("id, name, updated_at")
+    .select("id, name, updated_at, icon_key")
     .eq("id", kitchenId)
     .maybeSingle();
 
@@ -400,18 +450,18 @@ export async function loadKitchenData(
       .eq("kitchen_id", kitchenId)
       .eq("is_archived", false),
     supabase
-      .from("inventory_units")
+      .from("inventory")
       .select("id", { count: "exact", head: true })
       .eq("kitchen_id", kitchenId),
     supabase
-      .from("inventory_units")
+      .from("inventory")
       .select("id", { count: "exact", head: true })
       .eq("kitchen_id", kitchenId)
       .not("expires_at", "is", null)
       .gte("expires_at", todayString)
       .lte("expires_at", windowEndString),
     supabase
-      .from("inventory_units")
+      .from("inventory")
       .select("id", { count: "exact", head: true })
       .eq("kitchen_id", kitchenId)
       .not("expires_at", "is", null)
@@ -423,13 +473,13 @@ export async function loadKitchenData(
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
-      .from("inventory_units")
+      .from("inventory")
       .select("location_id")
       .eq("kitchen_id", kitchenId),
     supabase
-      .from("inventory_units")
+      .from("inventory")
       .select(
-        "id, quantity, uom, expires_at, items(name, brand), locations(name)",
+        "id, quantity, expires_at, items(name, brand), locations(name), units(name, abbreviation)",
       )
       .eq("kitchen_id", kitchenId)
       .not("expires_at", "is", null)
@@ -440,7 +490,7 @@ export async function loadKitchenData(
     supabase
       .from("alerts")
       .select(
-        "id, type, alert_date, inventory_units(id, quantity, uom, items(name), locations(name))",
+        "id, type, alert_date, inventory(id, quantity, items(name), locations(name), units(name, abbreviation))",
       )
       .eq("kitchen_id", kitchenId)
       .eq("acknowledged", false)
@@ -494,13 +544,18 @@ export async function loadKitchenData(
   const upcomingExpirations: ExpiringUnit[] = upcomingUnitsData.map((unit) => {
     const item = unwrapSingleRelation(unit.items);
     const location = unwrapSingleRelation(unit.locations);
+    const unitDetails = unwrapSingleRelation(unit.units);
+    const resolvedUnit =
+      unitDetails?.abbreviation?.trim() ??
+      unitDetails?.name?.trim() ??
+      "each";
 
     return {
       id: unit.id,
       name: item?.name ?? "Unnamed item",
       brand: item?.brand ?? null,
       quantity: parseNumber(unit.quantity),
-      uom: unit.uom ?? "each",
+      uom: resolvedUnit,
       expiresAt: unit.expires_at ?? null,
       location: location?.name ?? null,
     } satisfies ExpiringUnit;
@@ -508,10 +563,15 @@ export async function loadKitchenData(
 
   const alertsData = (alertsResult.data ?? []) as AlertRow[];
   const activeAlerts: AlertSummary[] = alertsData.map((alert) => {
-    const relatedUnitRaw = unwrapSingleRelation(alert.inventory_units);
+    const relatedUnitRaw = unwrapSingleRelation(alert.inventory);
     const relatedUnit = relatedUnitRaw ?? null;
     const item = unwrapSingleRelation(relatedUnit?.items);
     const location = unwrapSingleRelation(relatedUnit?.locations);
+    const unitDetails = unwrapSingleRelation(relatedUnit?.units);
+    const resolvedUnit =
+      unitDetails?.abbreviation?.trim() ??
+      unitDetails?.name?.trim() ??
+      "each";
 
     return {
       id: alert.id,
@@ -520,7 +580,7 @@ export async function loadKitchenData(
       itemName: item?.name ?? "Unnamed item",
       location: location?.name ?? null,
       quantity: parseNumber(relatedUnit?.quantity),
-      uom: relatedUnit?.uom ?? "each",
+      uom: resolvedUnit,
     } satisfies AlertSummary;
   });
 
@@ -536,6 +596,7 @@ export async function loadKitchenData(
 
   let members: KitchenMember[] | null = null;
   let memberCount: number | null = null;
+  const profileMap = new Map<string, ProfileRow>();
 
   const { data: roster, error: rosterError } = await admin
     .from("kitchen_members")
@@ -562,7 +623,7 @@ export async function loadKitchenData(
     if (userIds.length > 0) {
       const { data: profileRows, error: profileError } = await admin
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, avatar_url")
         .in("id", userIds);
 
       if (profileError) {
@@ -577,24 +638,117 @@ export async function loadKitchenData(
         memberCount = null;
       } else {
         const profileRowsData = (profileRows ?? []) as ProfileRow[];
-        const profileMap = new Map(
-          profileRowsData.map((row) => [row.id, row] as const),
+        const signedProfiles = await Promise.all(
+          profileRowsData.map(async (row) => {
+            const signedAvatar = await generateSignedAvatarUrl(admin, row.avatar_url ?? null);
+            return {
+              ...row,
+              avatar_url: signedAvatar ?? row.avatar_url ?? null,
+            };
+          }),
         );
+        for (const row of signedProfiles) {
+          if (row.id) {
+            profileMap.set(row.id, row);
+          }
+        }
 
         members = rosterData.map((entry) => {
           const profileRow = profileMap.get(entry.user_id ?? "");
           return {
             userId: entry.user_id,
-            role: entry.role,
+            role: entry.role === "owner" ? "owner" : "member",
             joinedAt: entry.joined_at ?? null,
             name: profileRow?.full_name ?? null,
             email: profileRow?.email ?? null,
+            avatarUrl: profileRow?.avatar_url ?? null,
           } satisfies KitchenMember;
         });
       }
     } else {
       members = [];
     }
+  }
+
+  let pendingInvites: KitchenInviteSummary[] = [];
+
+  const { data: invitesData, error: invitesError } = await admin
+    .from("kitchen_invitations")
+    .select("id, email, role, expires_at, invited_by, created_at")
+    .eq("kitchen_id", kitchenId)
+    .is("accepted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (invitesError) {
+    const inviteCode = (invitesError as { code?: string }).code;
+    if (inviteCode && inviteCode !== "42P17") {
+      throw invitesError;
+    }
+    if (!inviteCode && !invitesError.message.includes("service role credentials")) {
+      throw invitesError;
+    }
+    pendingInvites = [];
+  } else {
+    const inviteRows = (invitesData ?? []) as InviteRow[];
+    const inviterIds = Array.from(
+      new Set(
+        inviteRows
+          .map((row) => row.invited_by)
+          .filter((value): value is string => typeof value === "string" && value.length > 0),
+      ),
+    );
+
+    const missingInviters = inviterIds.filter((id) => !profileMap.has(id));
+    if (missingInviters.length > 0) {
+      const { data: inviterProfiles, error: inviterError } = await admin
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", missingInviters);
+
+      if (inviterError) {
+        const inviterCode = (inviterError as { code?: string }).code;
+        if (inviterCode && inviterCode !== "42P17") {
+          throw inviterError;
+        }
+        if (!inviterCode && !inviterError.message.includes("service role credentials")) {
+          throw inviterError;
+        }
+      } else {
+        const inviterRows = (inviterProfiles ?? []) as ProfileRow[];
+        const signedInviters = await Promise.all(
+          inviterRows.map(async (row) => {
+            const signedAvatar = await generateSignedAvatarUrl(admin, row.avatar_url ?? null);
+            return {
+              ...row,
+              avatar_url: signedAvatar ?? row.avatar_url ?? null,
+            };
+          }),
+        );
+        for (const row of signedInviters) {
+          if (row.id) {
+            profileMap.set(row.id, row);
+          }
+        }
+      }
+    }
+
+    pendingInvites = inviteRows
+      .filter((row) => typeof row.email === "string" && typeof row.role === "string")
+      .map((row) => {
+        const inviter = row.invited_by ? profileMap.get(row.invited_by) : undefined;
+        return {
+          id: row.id,
+          email: row.email?.trim() ?? "",
+          role:
+            row.role === "owner" || row.role === "editor" || row.role === "viewer"
+              ? row.role
+              : "viewer",
+          expiresAt: row.expires_at ?? null,
+          invitedByName: inviter?.full_name ?? null,
+          invitedByEmail: inviter?.email ?? null,
+          createdAt: row.created_at ?? null,
+        };
+      });
   }
 
   const derivedFullName = [profile.first_name, profile.last_name]
@@ -617,6 +771,7 @@ export async function loadKitchenData(
     kitchen: {
       id: kitchen.id,
       name: kitchen.name,
+      iconKey: kitchen.icon_key ?? "chef-hat",
       updatedAt: kitchen.updated_at ?? null,
       memberCount,
       members,
@@ -643,5 +798,6 @@ export async function loadKitchenData(
     upcomingExpirations,
     activeAlerts,
     recentReceipts,
+    pendingInvites,
   };
 }
