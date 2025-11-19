@@ -29,7 +29,7 @@ type AvatarUploaderProps = {
   currentAvatarUrl: string | null
   fallbackText: string
   refreshOnSuccess?: boolean
-  onUploadSuccess?: (blob: Blob) => void
+  onUploadSuccessAction?: (blob: Blob) => void
   triggerLabel?: string
 }
 
@@ -37,7 +37,7 @@ export function AvatarUploader({
   currentAvatarUrl,
   fallbackText,
   refreshOnSuccess = true,
-  onUploadSuccess,
+  onUploadSuccessAction,
   triggerLabel = "Change avatar",
 }: AvatarUploaderProps) {
   const router = useRouter()
@@ -175,7 +175,7 @@ export function AvatarUploader({
         toast.success("Avatar updated", {
           description: "Your new profile photo is live.",
         })
-        onUploadSuccess?.(blob)
+        onUploadSuccessAction?.(blob)
         setOpen(false)
         setSelectedImageUrl(null)
         setCroppedAreaPixels(null)

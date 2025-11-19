@@ -7,14 +7,21 @@ type Option = { id: string | number; name: string };
 
 type Props = {
   open: boolean;
-  onClose: () => void;
+  onCloseAction: () => void;
   kitchenId: string;
   units: Option[];
   locations: Option[];
-  onCreated?: () => void;
+  onCreatedAction?: () => void;
 };
 
-export default function AddItemModal({ open, onClose, kitchenId, units, locations, onCreated }: Props) {
+export default function AddItemModal({
+  open,
+  onCloseAction,
+  kitchenId,
+  units,
+  locations,
+  onCreatedAction,
+}: Props) {
   const supabase = createClient();
 
   const [form, setForm] = useState({
@@ -47,13 +54,17 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
         notes: form.notes || null,
       };
       const { error } = await supabase.from("items").insert(payload);
-      if (error) throw error;
+      if (error) {
+        setErr(error.message ?? "Failed to add item");
+        return;
+      }
 
-      onCreated?.();
-      onClose();
+      onCreatedAction?.();
+      onCloseAction();
       setForm({ name: "", quantity: 1, unit_id: "", location_id: "", expiration_date: "", notes: "" });
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to add item");
+    } catch (error: unknown) {
+      const message = error instanceof Error && error.message ? error.message : "Failed to add item";
+      setErr(message);
     } finally {
       setLoading(false);
     }
@@ -64,7 +75,7 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Add Item</h2>
-          <button onClick={onClose} className="rounded px-2 py-1">
+          <button onClick={onCloseAction} className="rounded px-2 py-1">
             ✕
           </button>
         </div>
