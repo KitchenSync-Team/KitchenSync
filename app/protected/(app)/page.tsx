@@ -36,7 +36,7 @@ export default function ProtectedOverviewPage() {
       <h1 className="text-2xl font-bold mb-8 text-center w-full">DASHBOARD</h1>
 
       {/* Grid of Navigation Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-10 max-w-5xl mx-auto">   
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-10 max-w-15xl">   
         {categories.map((cat, index) => {
           const isDisabled = disabledPaths.includes(cat.href);
           
