@@ -611,7 +611,7 @@ export function OnboardingForm({
                   currentAvatarUrl={avatarUrl}
                   fallbackText={avatarFallbackText}
                   refreshOnSuccess={false}
-                  onUploadSuccess={handleAvatarUploadSuccess}
+                  onUploadSuccessAction={handleAvatarUploadSuccess}
                 />
               </div>
             </div>

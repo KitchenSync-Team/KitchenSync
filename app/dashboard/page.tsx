@@ -87,11 +87,11 @@ export default function DashboardPage() {
 
       <AddItemModal
         open={open}
-        onClose={() => setOpen(false)}
+        onCloseAction={() => setOpen(false)}
         kitchenId={kitchenId ?? ''}     // safe because button disables until ready
         units={units}
         locations={locations}
-        onCreated={() => kitchenId && loadItems(kitchenId)}
+        onCreatedAction={() => kitchenId && loadItems(kitchenId)}
       />
     </div>
   );
