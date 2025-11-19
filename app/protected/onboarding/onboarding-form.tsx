@@ -305,7 +305,8 @@ export function OnboardingForm({
   }, [initialProfile.avatarUrl]);
 
   const handleLocationSummaryChange = useCallback(
-    (summary: { total: number; defaults: number; customs: number }) => {
+    (change: { summary: { total: number; defaults: number; customs: number } }) => {
+      const { summary } = change;
       setLocationSummary((previous) => {
         if (
           previous.total === summary.total &&

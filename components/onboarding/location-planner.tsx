@@ -86,6 +86,12 @@ type LocationPlannerProps = {
   defaultOptions: DefaultOption[];
   initialCustomLocations?: CustomLocation[];
   iconSections?: IconSection[];
+  resetSignal?: number | string;
+};
+
+type LocationPlannerChange = {
+  summary: { total: number; defaults: number; customs: number };
+  locations: FinalLocation[];
 };
 
 function getIconComponent(value: string | null | undefined, choices: IconChoice[]): LucideIcon {
@@ -102,8 +108,9 @@ export function LocationPlanner({
   initialCustomLocations = [],
   iconSections = DEFAULT_ICON_SECTIONS,
   onSelectionChange,
+  resetSignal,
 }: LocationPlannerProps & {
-  onSelectionChange?: (summary: { total: number; defaults: number; customs: number }) => void;
+  onSelectionChange?: (change: LocationPlannerChange) => void;
 }) {
   const allIconChoices = useMemo(
     () => iconSections.flatMap((section) => section.choices),
@@ -132,6 +139,14 @@ export function LocationPlanner({
     () => new Map(defaultOptions.map((option) => [option.value.toLowerCase(), option])),
     [defaultOptions],
   );
+
+  useEffect(() => {
+    setSelectedDefaults(new Set(defaultSelections));
+  }, [defaultSelections, resetSignal]);
+
+  useEffect(() => {
+    setCustomLocations(initialCustomLocations);
+  }, [initialCustomLocations, resetSignal]);
 
   const finalLocations: FinalLocation[] = useMemo(() => {
     const defaults = defaultOptions
@@ -219,11 +234,12 @@ export function LocationPlanner({
   };
 
   useEffect(() => {
-    onSelectionChange?.({
+    const summary = {
       total: finalLocations.length,
       defaults: finalLocations.filter((location) => location.source === "default").length,
       customs: finalLocations.filter((location) => location.source === "custom").length,
-    });
+    };
+    onSelectionChange?.({ summary, locations: finalLocations });
   }, [finalLocations, onSelectionChange]);
 
   return (
@@ -291,12 +307,6 @@ export function LocationPlanner({
             </Button>
           ) : null}
         </div>
-
-        {customLocations.length === 0 && !isAdding ? (
-          <p className="text-xs text-muted-foreground">
-            No custom locations yet. Add one to make your kitchen feel personal.
-          </p>
-        ) : null}
 
         <div className="space-y-2">
           {customLocations.map((location) => {
