@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
-
+import { NotificationBell } from "@/components/navigation/notification-bell";
 import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import type { NavMainItem } from "@/components/navigation/nav-main";
@@ -82,10 +82,19 @@ export default async function ProtectedAppLayout({
         user={userNavData}
       />
       <SidebarInset className="flex min-h-svh flex-1 flex-col">
-        <header className="flex h-16 items-center border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <span className="ml-4 text-sm text-muted-foreground">KitchenSync</span>
+        <header className="flex h-16 items-center justify-between border-b px-4">
+          {/* Left Section: Trigger & Brand Name */}
+          <div className="flex items-center">
+            <SidebarTrigger className="-ml-1" />
+            <span className="ml-4 text-sm text-muted-foreground">KitchenSync</span>
+          </div>
+
+          {/* Right Section: The New Notification Bell */}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+          </div>
         </header>
+
         <main className="flex flex-1 flex-col p-4">{children}</main>
       </SidebarInset>
     </SidebarProvider>
