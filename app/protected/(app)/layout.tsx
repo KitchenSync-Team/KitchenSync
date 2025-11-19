@@ -7,6 +7,7 @@ import type { NavMainItem } from "@/components/navigation/nav-main";
 import type { NavUserData } from "@/components/navigation/nav-user";
 import { defaultKitchenIconId, isKitchenIconId } from "@/components/navigation/kitchen-icons";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppBreadcrumb } from "@/components/navigation/app-breadcrumb";
 
 export default async function ProtectedAppLayout({
   children,
@@ -86,7 +87,9 @@ export default async function ProtectedAppLayout({
           {/* Left Section: Trigger & Brand Name */}
           <div className="flex items-center">
             <SidebarTrigger className="-ml-1" />
-            <span className="ml-4 text-sm text-muted-foreground">KitchenSync</span>
+            <div className="ml-4">
+              <AppBreadcrumb baseHref="/protected" navItems={navMain} />
+            </div>
           </div>
 
           {/* Right Section: The New Notification Bell */}

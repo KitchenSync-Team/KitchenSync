@@ -52,8 +52,9 @@ export default function AddItemModal({ open, onClose, kitchenId, units, location
       onCreated?.();
       onClose();
       setForm({ name: "", quantity: 1, unit_id: "", location_id: "", expiration_date: "", notes: "" });
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to add item");
+    } catch (error: unknown) {
+      const message = error instanceof Error && error.message ? error.message : "Failed to add item";
+      setErr(message);
     } finally {
       setLoading(false);
     }
