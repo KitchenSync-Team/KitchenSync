@@ -61,6 +61,62 @@ type LocationSummary = {
   customs: number;
 };
 
+type PlannerSelection = {
+  name: string;
+  icon: string | null;
+  source: "default" | "custom";
+};
+
+function summarizeInitialLocations(
+  defaultOptions: DefaultLocationOption[],
+  customLocations: CustomPlannerLocation[],
+): LocationSummary {
+  const defaults = defaultOptions.filter((option) => option.selected).length;
+  const customs = customLocations.length;
+  return {
+    defaults,
+    customs,
+    total: defaults + customs,
+  };
+}
+
+function selectionsHash(selections: PlannerSelection[]): string {
+  return JSON.stringify(selections);
+}
+
+function applySelectionsToDefaults(
+  defaultOptions: DefaultLocationOption[],
+  selections: PlannerSelection[],
+): DefaultLocationOption[] {
+  const selectedSet = new Set(
+    selections
+      .filter((selection) => selection.source === "default")
+      .map((selection) => selection.name.toLowerCase()),
+  );
+
+  return defaultOptions.map((option) => ({
+    ...option,
+    selected: selectedSet.has(option.value.toLowerCase()),
+  }));
+}
+
+function buildCustomLocationsFromSelections(selections: PlannerSelection[]): CustomPlannerLocation[] {
+  const customSelections = selections.filter((selection) => selection.source === "custom");
+  return customSelections.map((selection, index) => ({
+    id: generateCustomLocationId(selection.name, index),
+    name: selection.name,
+    icon: selection.icon ?? null,
+  }));
+}
+
+function generateCustomLocationId(seed: string, index: number) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const safeSeed = seed && seed.trim().length > 0 ? seed.trim().toLowerCase() : "location";
+  return `${safeSeed}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function CardSubmitButton({ disabled, label }: { disabled?: boolean; label: string }) {
   const { pending } = useFormStatus();
   return (
@@ -340,41 +396,98 @@ function StorageLocationsCard({
     updateKitchenSettings,
     defaultKitchenSettingsState,
   );
-  const [locationSummary, setLocationSummary] = useState<LocationSummary>(() => {
-    const defaultCount = defaultOptions.filter((option) => option.selected).length;
-    return {
-      defaults: defaultCount,
-      customs: initialCustomLocations.length,
-      total: defaultCount + initialCustomLocations.length,
-    };
-  });
+  const [plannerDefaults, setPlannerDefaults] = useState(defaultOptions);
+  const [plannerCustomLocations, setPlannerCustomLocations] = useState(initialCustomLocations);
+  const [resetSignal, setResetSignal] = useState(0);
+  const initialSummary = summarizeInitialLocations(defaultOptions, initialCustomLocations);
+  const [locationSummary, setLocationSummary] = useState<LocationSummary>(initialSummary);
+  const [baselineSummary, setBaselineSummary] = useState<LocationSummary>(initialSummary);
+  const [currentHash, setCurrentHash] = useState<string | null>(null);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const baselineSelectionsRef = useRef<PlannerSelection[] | null>(null);
+  const latestSelectionsRef = useRef<PlannerSelection[]>([]);
+  const expectingBaselineRef = useRef(true);
   const lastHandledStatus = useRef<"idle" | "success" | "error">("idle");
 
-  const handleLocationSummaryChange = useCallback((summary: LocationSummary) => {
-    setLocationSummary((previous) => {
-      if (
-        previous.total === summary.total &&
-        previous.defaults === summary.defaults &&
-        previous.customs === summary.customs
-      ) {
-        return previous;
+  useEffect(() => {
+    setPlannerDefaults(defaultOptions);
+    setPlannerCustomLocations(initialCustomLocations);
+    const summary = summarizeInitialLocations(defaultOptions, initialCustomLocations);
+    setLocationSummary(summary);
+    setBaselineSummary(summary);
+    baselineSelectionsRef.current = null;
+    latestSelectionsRef.current = [];
+    expectingBaselineRef.current = true;
+    setCurrentHash(null);
+    setLastSavedHash(null);
+    setResetSignal((value) => value + 1);
+  }, [defaultOptions, initialCustomLocations]);
+
+  const applySelectionsToPlanner = useCallback(
+    (selections: PlannerSelection[]) => {
+      setPlannerDefaults(applySelectionsToDefaults(defaultOptions, selections));
+      setPlannerCustomLocations(buildCustomLocationsFromSelections(selections));
+      setResetSignal((value) => value + 1);
+    },
+    [defaultOptions],
+  );
+
+  const handlePlannerChange = useCallback(
+    (change: { summary: LocationSummary; locations: PlannerSelection[] }) => {
+      setLocationSummary((previous) => {
+        if (
+          previous.total === change.summary.total &&
+          previous.defaults === change.summary.defaults &&
+          previous.customs === change.summary.customs
+        ) {
+          return previous;
+        }
+        return change.summary;
+      });
+
+      latestSelectionsRef.current = change.locations;
+      const nextHash = selectionsHash(change.locations);
+      setCurrentHash(nextHash);
+
+      if (expectingBaselineRef.current) {
+        baselineSelectionsRef.current = change.locations.map((selection) => ({ ...selection }));
+        setBaselineSummary(change.summary);
+        setLastSavedHash(nextHash);
+        expectingBaselineRef.current = false;
       }
-      return summary;
-    });
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (state.status === "success" && lastHandledStatus.current !== "success") {
       toast.success("Storage locations saved");
+      const latestSelections = latestSelectionsRef.current;
+      baselineSelectionsRef.current = latestSelections.map((selection) => ({ ...selection }));
+      setBaselineSummary(locationSummary);
+      if (currentHash) {
+        setLastSavedHash(currentHash);
+      }
     } else if (state.status === "error" && lastHandledStatus.current !== "error") {
       toast.error("Couldn’t save locations", {
         description: state.error ?? "Try again shortly.",
       });
     }
     lastHandledStatus.current = state.status;
-  }, [state.status, state.error]);
+  }, [state.status, state.error, currentHash, locationSummary]);
 
-  const disableSubmit = locationSummary.total === 0;
+  const hasSnapshot = Boolean(currentHash && lastSavedHash);
+  const disableSubmit = locationSummary.total === 0 || !hasSnapshot || currentHash === lastSavedHash;
+  const disableReset = !hasSnapshot || currentHash === lastSavedHash;
+
+  const handleResetLocations = useCallback(() => {
+    if (!baselineSelectionsRef.current || !lastSavedHash) {
+      return;
+    }
+    applySelectionsToPlanner(baselineSelectionsRef.current);
+    setLocationSummary(baselineSummary);
+    setCurrentHash(lastSavedHash);
+  }, [applySelectionsToPlanner, baselineSummary, lastSavedHash]);
 
   return (
     <Card
@@ -386,37 +499,40 @@ function StorageLocationsCard({
       <form action={formAction}>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <CardTitle>Tracked storage locations</CardTitle>
+            <CardTitle>Storage locations</CardTitle>
             <CardDescription>
-              Align on which areas KitchenSync monitors. Add personalized zones or prune old ones anytime.
+              Tell us where ingredients live so everyone files items back in the right spot.
             </CardDescription>
           </div>
           <div
             className={cn(
-              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap",
               locationSummary.total === 0
                 ? "border-red-400 bg-red-500/10 text-red-600 dark:border-red-500 dark:bg-red-500/15 dark:text-red-200"
                 : "border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200",
             )}
           >
             {locationSummary.total === 0
-              ? "None selected"
-              : `${locationSummary.total} selected (${locationSummary.defaults} starter, ${locationSummary.customs} custom)`}
+              ? "0 locations selected"
+              : `${locationSummary.total} locations selected`}
           </div>
         </CardHeader>
         <CardContent>
           <input type="hidden" name="kitchenId" value={kitchenId} />
           <LocationPlanner
-            defaultOptions={defaultOptions}
-            initialCustomLocations={initialCustomLocations}
-            onSelectionChange={handleLocationSummaryChange}
+            defaultOptions={plannerDefaults}
+            initialCustomLocations={plannerCustomLocations}
+            onSelectionChange={handlePlannerChange}
+            resetSignal={resetSignal}
           />
         </CardContent>
-        <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            Pick at least one storage area so inventory items have a home from day one.
-          </p>
-          <CardSubmitButton label="Save storage plan" disabled={disableSubmit} />
+        <CardFooter className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button type="button" variant="ghost" disabled={disableReset} onClick={handleResetLocations}>
+              Reset
+            </Button>
+            <CardSubmitButton label="Save locations" disabled={disableSubmit} />
+          </div>
         </CardFooter>
       </form>
     </Card>
