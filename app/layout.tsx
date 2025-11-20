@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { SupabaseSessionProvider } from "@/components/auth/supabase-session-provider";
 import { SupabaseSessionListener } from "@/components/auth/supabase-session-listener";
@@ -32,12 +31,6 @@ export const metadata: Metadata = {
   },
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  display: "swap",
-  subsets: ["latin"],
-});
-
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -50,7 +43,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.className} antialiased`}>
+      <body className="antialiased">
         <SupabaseSessionProvider session={session}>
           <ThemeProvider
             attribute="class"

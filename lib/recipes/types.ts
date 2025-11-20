@@ -1,0 +1,55 @@
+export type NormalizedIngredient = {
+  name: string;
+  original: string;
+};
+
+export type NormalizedRecipe = {
+  id: number;
+  title: string;
+  image: string | null;
+  readyInMinutes?: number | null;
+  aggregateLikes?: number | null;
+  healthScore?: number | null;
+  sourceUrl?: string | null;
+  diets?: string[];
+  usedIngredientCount?: number;
+  missedIngredientCount?: number;
+  usedIngredients?: NormalizedIngredient[];
+  missedIngredients?: NormalizedIngredient[];
+};
+
+export type AppliedPreferences = {
+  diet: string[];
+  allergens: string[];
+  includeCuisines: string[];
+  excludeCuisines: string[];
+  personalizationSkipped: boolean;
+  usedPantryItems: string[];
+};
+
+export type RecipeSearchPayload = {
+  query?: string;
+  includeIngredients?: string[];
+  maxReadyTime?: number;
+  sort?: string;
+  number?: number;
+  usePantry?: boolean;
+  ignorePreferences?: boolean;
+  diet?: string[];
+  allergens?: string[];
+  cuisineLikes?: string[];
+  cuisineDislikes?: string[];
+  useCuisineLikes?: boolean;
+  applyDiet?: boolean;
+  applyAllergens?: boolean;
+  applyCuisineDislikes?: boolean;
+};
+
+export type RecipeSearchResponse = {
+  results: NormalizedRecipe[];
+  totalResults: number;
+  cached: boolean;
+  appliedPreferences: AppliedPreferences;
+  endpoint: "complexSearch" | "findByIngredients";
+  cacheKey?: string;
+};

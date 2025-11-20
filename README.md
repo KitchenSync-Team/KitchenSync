@@ -4,10 +4,17 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 
 ## Highlights
 
-- **Supabase-first auth & data** – Edge middleware plus `lib/domain/kitchen.ts` keep every protected route in sync with Supabase sessions and row-level security.
-- **Onboarding guardrails** – New members confirm profile details, dietary styles, allergens, communication prefs, and storage locations before reaching the dashboard.
-- **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, measurement units, and avatars (cropped + uploaded to S3/Supabase Storage).
-- **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
+ - **Supabase-first auth & data** – Edge middleware plus `lib/domain/kitchen.ts` keep every protected route in sync with Supabase sessions and row-level security.
+ - **Onboarding guardrails** – New members confirm profile details, dietary styles, allergens, communication prefs, and storage locations before reaching the dashboard.
+ - **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, measurement units, and avatars (cropped + uploaded to S3/Supabase Storage).
+ - **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
+
+## Recipes experience
+
+- `/protected/recipes` uses a two-column layout: filters on the left; search bar + “Search” and “I’m feeling hungry” on top of results.
+- Filters: diet, allergens, cuisine likes/dislikes, pantry toggle, ready-in minutes, sort. “Reset to profile” restores saved prefs, “Clear filters” empties them, and “Skip my profile” ignores saved prefs.
+- “Search” posts to `/api/recipes/search`. “I’m feeling hungry” hits `/api/recipes/random` (12 recipes; respects filters and falls back to unfiltered if empty).
+- Results use `components/recipes/recipe-card` with Details and “Open recipe” (sourceUrl) actions; the details dialog shows ingredients used/missing and tags.
 
 ## Tech Stack
 
@@ -54,6 +61,7 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (match anon key)
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
    - `S3_AVATARS_*` variables if you plan to test avatar uploads locally
+   The middleware also accepts `SUPABASE_URL` / `SUPABASE_ANON_KEY` as fallbacks.
 
 4. **Run & lint**
    ```bash
