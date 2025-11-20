@@ -30,7 +30,7 @@ export function buildIngredientInfoUrl(id: number, apiKey: string) {
 export function normalizeIngredientInfo(data: unknown, cacheKey?: string): IngredientInfo | null {
   const payload = (data ?? {}) as SpoonacularIngredientInfo;
   if (typeof payload.id !== "number" || !payload.name) return null;
-  const normalized: IngredientInfo = {
+  return {
     id: payload.id,
     name: payload.name,
     aisle: typeof payload.aisle === "string" ? payload.aisle : null,
@@ -41,7 +41,6 @@ export function normalizeIngredientInfo(data: unknown, cacheKey?: string): Ingre
     nutrition: payload.nutrition ?? undefined,
     cacheKey,
   };
-  return normalized;
 }
 
 export async function readIngredientInfoCache(cacheKey: string) {

@@ -96,7 +96,7 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
       pantryIngredients = inventoryRows
         .map((row) => {
           const item = Array.isArray(row.items) ? row.items[0] ?? row.items : row.items;
-          if (item && typeof item === "object" && item !== null && "name" in item) {
+          if (item && typeof item === "object" && "name" in item) {
             const value = (item as { name: unknown }).name;
             return typeof value === "string" ? value : null;
           }

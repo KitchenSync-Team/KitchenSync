@@ -118,7 +118,7 @@ export function InventoryClient({
           })
           .filter(
             (r): r is IngredientResult =>
-              r !== null && typeof r.id === "number" && Number.isFinite(r.id) && Boolean(r.name),
+              r !== null && Number.isFinite(r.id) && Boolean(r.name),
           );
         setIngredientResults(mapped);
       } else {
@@ -132,7 +132,7 @@ export function InventoryClient({
           .filter((r): r is GroceryResult => Boolean(r?.id) && Boolean(r?.title));
         setGroceryResults(mapped);
       }
-      setCached((data as { cached?: boolean }).cached === true);
+      setCached(Boolean((data as { cached?: boolean }).cached));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Search failed";
       setError(message);

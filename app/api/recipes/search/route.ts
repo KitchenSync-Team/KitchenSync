@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       maxReadyTime: typeof rawBody.maxReadyTime === "number" ? rawBody.maxReadyTime : undefined,
       sort: typeof rawBody.sort === "string" ? rawBody.sort : undefined,
       number: typeof rawBody.number === "number" ? rawBody.number : undefined,
-      usePantry: rawBody.usePantry === false ? false : true,
+      usePantry: rawBody.usePantry !== false,
       ignorePreferences: rawBody.ignorePreferences === true,
       diet: toStringArray(rawBody.diet),
       allergens: toStringArray(rawBody.allergens),
