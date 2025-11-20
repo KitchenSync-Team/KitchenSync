@@ -1,0 +1,770 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ExternalLink, Loader2, Search, Sparkles, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { RecipeCard } from "@/components/recipes/recipe-card";
+import { RecipeCardSkeleton } from "@/components/recipes/recipe-skeleton";
+import type { AppliedPreferences, NormalizedRecipe, RecipeSearchResponse } from "@/lib/recipes/types";
+import {
+  ALLERGEN_OPTIONS,
+  CUISINE_PREFERENCE_OPTIONS,
+  DIETARY_OPTIONS,
+} from "@/app/protected/onboarding/constants";
+import { cn } from "@/lib/supabase/utils";
+
+type PreferencesSnapshot = {
+  dietaryPreferences: string[];
+  allergens: string[];
+  cuisineLikes: string[];
+  cuisineDislikes: string[];
+  personalizationOptIn: boolean;
+};
+
+type SearchMeta = {
+  totalResults: number;
+  cached: boolean;
+  appliedPreferences: AppliedPreferences;
+};
+
+export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot }) {
+  const [query, setQuery] = useState("");
+  const [ingredientsInput, setIngredientsInput] = useState("");
+  const [usePantry, setUsePantry] = useState(true);
+  const [ignorePreferences, setIgnorePreferences] = useState(false);
+  const [maxReadyTime, setMaxReadyTime] = useState<string>("");
+  const [sort, setSort] = useState<string>("max-used-ingredients");
+  const [results, setResults] = useState<NormalizedRecipe[]>([]);
+  const [meta, setMeta] = useState<SearchMeta | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailRecipe, setDetailRecipe] = useState<NormalizedRecipe | null>(null);
+  const [hungryLoading, setHungryLoading] = useState(false);
+
+  const [selectedDiets, setSelectedDiets] = useState(preferences.dietaryPreferences ?? []);
+  const [selectedAllergens, setSelectedAllergens] = useState(preferences.allergens ?? []);
+  const [selectedLikes, setSelectedLikes] = useState(preferences.cuisineLikes ?? []);
+  const [selectedDislikes, setSelectedDislikes] = useState(preferences.cuisineDislikes ?? []);
+
+  const parsedMaxReadyTime = useMemo(() => {
+    const parsed = Number(maxReadyTime);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [maxReadyTime]);
+
+  const dietOptions = useMemo(
+    () => DIETARY_OPTIONS.map((option) => option.value),
+    [],
+  );
+  const dietLabels = useMemo(
+    () => Object.fromEntries(DIETARY_OPTIONS.map((option) => [option.value, option.label])),
+    [],
+  );
+  const allergenOptions = useMemo(() => ALLERGEN_OPTIONS.map((option) => option.value), []);
+  const allergenLabels = useMemo(
+    () => Object.fromEntries(ALLERGEN_OPTIONS.map((option) => [option.value, option.label])),
+    [],
+  );
+  const cuisineOptions = useMemo(
+    () => CUISINE_PREFERENCE_OPTIONS.map((option) => option.value),
+    [],
+  );
+  const cuisineLabels = useMemo(
+    () => Object.fromEntries(CUISINE_PREFERENCE_OPTIONS.map((option) => [option.value, option.label])),
+    [],
+  );
+
+  const toggleDiet = (value: string) => {
+    setSelectedDiets((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+  };
+
+  const toggleAllergen = (value: string) => {
+    setSelectedAllergens((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+  };
+
+  const toggleLike = (value: string) => {
+    setSelectedLikes((current) => {
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      setSelectedDislikes((dislikes) => dislikes.filter((item) => item !== value));
+      return Array.from(next);
+    });
+  };
+
+  const toggleDislike = (value: string) => {
+    setSelectedDislikes((current) => {
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      setSelectedLikes((likes) => likes.filter((item) => item !== value));
+      return Array.from(next);
+    });
+  };
+
+  const clearAllFilters = () => {
+    setSelectedDiets([]);
+    setSelectedAllergens([]);
+    setSelectedLikes([]);
+    setSelectedDislikes([]);
+    setMaxReadyTime("");
+    setSort("max-used-ingredients");
+    setUsePantry(true);
+    setIgnorePreferences(false);
+  };
+
+  const resetFiltersToProfile = () => {
+    setSelectedDiets(preferences.dietaryPreferences ?? []);
+    setSelectedAllergens(preferences.allergens ?? []);
+    setSelectedLikes(preferences.cuisineLikes ?? []);
+    setSelectedDislikes(preferences.cuisineDislikes ?? []);
+  };
+
+  async function runSearch() {
+    setLoading(true);
+    setError(null);
+
+    const includeIngredients = ingredientsInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    try {
+      const res = await fetch("/api/recipes/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: query.trim() || undefined,
+          includeIngredients,
+          maxReadyTime: parsedMaxReadyTime,
+          sort,
+          usePantry,
+          ignorePreferences,
+          diet: selectedDiets,
+          allergens: selectedAllergens,
+          cuisineLikes: selectedLikes,
+          cuisineDislikes: selectedDislikes,
+          useCuisineLikes: selectedLikes.length > 0,
+          applyDiet: selectedDiets.length > 0,
+          applyAllergens: selectedAllergens.length > 0,
+          applyCuisineDislikes: selectedDislikes.length > 0,
+        }),
+      });
+
+      const data = (await res.json()) as Partial<RecipeSearchResponse> & Record<string, unknown>;
+      if (!res.ok) {
+        const message =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.detail === "string"
+              ? data.detail
+              : "Recipe search failed";
+        setError(message);
+        return;
+      }
+
+      setResults(Array.isArray(data.results) ? data.results : []);
+      setMeta({
+        totalResults: typeof data.totalResults === "number" ? data.totalResults : 0,
+        cached: data.cached === true,
+        appliedPreferences: {
+          diet: selectedDiets,
+          allergens: selectedAllergens,
+          includeCuisines: selectedLikes,
+          excludeCuisines: selectedDislikes,
+          personalizationSkipped: !preferences.personalizationOptIn || ignorePreferences,
+          usedPantryItems: usePantry ? [] : [],
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Recipe search failed";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runHungry() {
+    setHungryLoading(true);
+    setError(null);
+
+    const includeTags = [...selectedDiets, ...selectedAllergens, ...selectedLikes].filter(Boolean);
+    const excludeTags = [...selectedDislikes].filter(Boolean);
+    const params = new URLSearchParams();
+    params.set("number", "12");
+    if (selectedDiets.length > 0) params.set("diet", selectedDiets.join(","));
+    if (selectedAllergens.length > 0) params.set("intolerances", selectedAllergens.join(","));
+    if (selectedLikes.length > 0) params.set("cuisine", selectedLikes.join(","));
+    if (selectedDislikes.length > 0) params.set("excludeCuisine", selectedDislikes.join(","));
+    if (includeTags.length > 0) {
+      const value = includeTags.join(",");
+      params.set("include-tags", value);
+      params.set("include", value);
+    }
+    if (excludeTags.length > 0) {
+      const value = excludeTags.join(",");
+      params.set("exclude-tags", value);
+      params.set("exclude", value);
+    }
+
+    try {
+      const res = await fetch(`/api/recipes/random?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.detail === "string"
+              ? data.detail
+              : "Could not load random recipes";
+        setError(message);
+        return;
+      }
+
+      let nextResults = Array.isArray(data.results) ? data.results : [];
+
+      // If nothing came back with filters, fall back to an unfiltered random pull.
+      if (nextResults.length === 0) {
+        try {
+          const fallbackRes = await fetch("/api/recipes/random?number=12");
+          const fallbackData = await fallbackRes.json();
+          if (fallbackRes.ok && Array.isArray(fallbackData.results)) {
+            nextResults = fallbackData.results;
+          }
+        } catch {
+          // ignore fallback errors; surface below if still empty
+        }
+      }
+
+      if (nextResults.length === 0) {
+        setError("No recipes right now. Try again or loosen the filters.");
+      }
+
+      setResults(nextResults);
+      setMeta({
+        totalResults: nextResults.length,
+        cached: false,
+        appliedPreferences: {
+          diet: nextResults.length > 0 ? selectedDiets : [],
+          allergens: nextResults.length > 0 ? selectedAllergens : [],
+          includeCuisines: nextResults.length > 0 ? selectedLikes : [],
+          excludeCuisines: nextResults.length > 0 ? selectedDislikes : [],
+          personalizationSkipped: ignorePreferences,
+          usedPantryItems: usePantry ? [] : [],
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not load random recipes";
+      setError(message);
+    } finally {
+      setHungryLoading(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <aside className="lg:sticky lg:top-4 lg:self-start">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Filters</CardTitle>
+            <CardDescription>
+              Check likes, dislikes, allergens, and diet before searching.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <DietAllergenGroup
+              title="Dietary preferences"
+              description="Select eating styles to include."
+              options={dietOptions}
+              labels={dietLabels}
+              selected={selectedDiets}
+              onToggle={toggleDiet}
+              onClear={() => setSelectedDiets([])}
+            />
+            <AllergenGroup
+              title="Allergens to avoid"
+              description="We’ll exclude these."
+              options={allergenOptions}
+              labels={allergenLabels}
+              selected={selectedAllergens}
+              onToggle={toggleAllergen}
+              onClear={() => setSelectedAllergens([])}
+            />
+            <CuisineGroup
+              title="Cuisine likes"
+              description="Boost recipes that match these."
+              options={cuisineOptions}
+              labels={cuisineLabels}
+              selected={selectedLikes}
+              onToggle={toggleLike}
+              onClear={() => setSelectedLikes([])}
+              tone="positive"
+            />
+            <CuisineGroup
+              title="Cuisine dislikes"
+              description="Skip these cuisines."
+              options={cuisineOptions}
+              labels={cuisineLabels}
+              selected={selectedDislikes}
+              onToggle={toggleDislike}
+              onClear={() => setSelectedDislikes([])}
+              tone="negative"
+            />
+
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Ready in (minutes)</p>
+                  <p className="text-xs text-muted-foreground">Skip long cooks.</p>
+                </div>
+                <Input
+                  className="w-24"
+                  inputMode="numeric"
+                  value={maxReadyTime}
+                  onChange={(event) => setMaxReadyTime(event.target.value)}
+                  placeholder="30"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Sort</Label>
+                <Select value={sort} onValueChange={setSort}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort results" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="max-used-ingredients">Use what I have</SelectItem>
+                    <SelectItem value="min-missing-ingredients">Minimize missing</SelectItem>
+                    <SelectItem value="popularity">Most popular</SelectItem>
+                    <SelectItem value="time">Fastest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Switch id="use-pantry" checked={usePantry} onCheckedChange={setUsePantry} />
+                  <Label htmlFor="use-pantry" className="text-sm">
+                    Use pantry
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="ignore-preferences"
+                    checked={ignorePreferences}
+                    onCheckedChange={setIgnorePreferences}
+                  />
+                  <Label htmlFor="ignore-preferences" className="text-sm">
+                    Skip my profile
+                  </Label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                Clear filters
+              </Button>
+              <Button variant="ghost" size="sm" onClick={resetFiltersToProfile}>
+                Reset to profile
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </aside>
+
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
+              <div className="flex w-full flex-1 min-w-0">
+              <Input
+                id="query"
+                placeholder="Search recipes (e.g., chicken soup, pesto pasta)"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                  className="w-full min-w-[260px]"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") runSearch();
+                  }}
+                />
+              </div>
+              <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:justify-end">
+                <Button onClick={runSearch} disabled={loading} className="w-full md:w-auto gap-2">
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Searching
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4" />
+                      Search
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={hungryLoading}
+                  className="w-full md:w-auto gap-2"
+                  onClick={runHungry}
+                >
+                  {hungryLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      I’m feeling hungry…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      I’m feeling hungry
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground" htmlFor="ingredients">
+                Ingredients you want to use (comma separated)
+              </Label>
+              <Input
+                id="ingredients"
+                placeholder="e.g., chicken, rice, broccoli"
+                value={ingredientsInput}
+                onChange={(event) => setIngredientsInput(event.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {maxReadyTime && <Badge variant="secondary">Max {maxReadyTime} min</Badge>}
+            </div>
+
+            {error && (
+              <p className="text-sm text-destructive" role="status">
+                {error}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <RecipeCardSkeleton key={index} />
+            ))}
+          </div>
+        ) : results.length > 0 ? (
+          <div className="space-y-3">
+            {meta && (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <span>
+                  Showing {results.length} of {meta.totalResults} recipes
+                  {meta.cached ? " (cached)" : ""}
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {results.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  onViewDetails={(currentRecipe) => {
+                    setDetailRecipe(currentRecipe);
+                    setDetailOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState />
+        )}
+      </div>
+
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{detailRecipe?.title ?? "Recipe details"}</DialogTitle>
+          </DialogHeader>
+          {detailRecipe && (
+            <div className="space-y-4">
+              {detailRecipe.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={detailRecipe.image}
+                  alt={detailRecipe.title}
+                  className="h-56 w-full rounded-md object-cover"
+                />
+              )}
+              <div className="flex flex-wrap gap-2 text-xs">
+              {detailRecipe.readyInMinutes && (
+                <Badge variant="secondary">{detailRecipe.readyInMinutes} min</Badge>
+              )}
+              {(detailRecipe.diets ?? []).map((diet) => (
+                <Badge key={diet} variant="secondary">
+                  {diet}
+                </Badge>
+              ))}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">Uses</p>
+                  {detailRecipe.usedIngredients && detailRecipe.usedIngredients.length > 0 ? (
+                    <ul className="space-y-1 text-muted-foreground">
+                      {detailRecipe.usedIngredients.map((ing) => (
+                        <li key={`used-${ing.original}`}>{ing.original || ing.name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">None</p>
+                  )}
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">Missing</p>
+                  {detailRecipe.missedIngredients && detailRecipe.missedIngredients.length > 0 ? (
+                    <ul className="space-y-1 text-muted-foreground">
+                      {detailRecipe.missedIngredients.map((ing) => (
+                        <li key={`miss-${ing.original}`}>{ing.original || ing.name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">None</p>
+                  )}
+                </div>
+              </div>
+              {detailRecipe?.sourceUrl && (
+                <Button asChild variant="ghost" className="gap-2">
+                  <a href={detailRecipe.sourceUrl} target="_blank" rel="noreferrer">
+                    Open recipe
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DietAllergenGroup({
+  title,
+  description,
+  options,
+  labels,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  title: string;
+  description: string;
+  options: string[];
+  labels: Record<string, string>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const sorted = useMemo(() => options.slice().sort((a, b) => (labels[a] ?? a).localeCompare(labels[b] ?? b)), [options, labels]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {sorted.map((value) => {
+          const id = `${title}-${value}`;
+          const checked = selected.includes(value);
+          return (
+            <label
+              key={value}
+              htmlFor={id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border border-border bg-background/70 p-3 text-sm transition",
+                "hover:border-emerald-500",
+                checked && "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
+              )}
+            >
+              <Checkbox id={id} checked={checked} onCheckedChange={() => onToggle(value)} />
+              <span className="font-medium">{labels[value] ?? value}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AllergenGroup({
+  title,
+  description,
+  options,
+  labels,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  title: string;
+  description: string;
+  options: string[];
+  labels: Record<string, string>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const sorted = useMemo(
+    () => options.slice().sort((a, b) => (labels[a] ?? a).localeCompare(labels[b] ?? b)),
+    [options, labels],
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {sorted.map((value) => {
+          const isSelected = selected.includes(value);
+          const id = `${title}-${value}`;
+          return (
+            <label
+              key={id}
+              htmlFor={id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border border-border bg-background/70 p-3 text-sm transition hover:border-rose-500",
+                isSelected && "border-rose-500 bg-rose-500/5",
+              )}
+            >
+              <Checkbox
+                id={id}
+                checked={isSelected}
+                checkedClassName="data-[state=checked]:border-rose-500 data-[state=checked]:bg-rose-500 data-[state=checked]:text-white"
+                focusRingClassName="focus-visible:ring-rose-500"
+                indicatorClassName="text-white"
+                indicatorIcon={X}
+                onCheckedChange={() => onToggle(value)}
+              />
+              <span className={cn("font-medium", isSelected && "text-rose-700 dark:text-rose-200")}>
+                {labels[value] ?? value}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CuisineGroup({
+  title,
+  description,
+  options,
+  labels,
+  selected,
+  onToggle,
+  onClear,
+  tone = "positive",
+}: {
+  title: string;
+  description: string;
+  options: string[];
+  labels: Record<string, string>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+  tone?: "positive" | "negative";
+}) {
+  const sorted = useMemo(() => options.slice().sort((a, b) => (labels[a] ?? a).localeCompare(labels[b] ?? b)), [options, labels]);
+
+  const toneClasses =
+    tone === "positive"
+      ? {
+          border: "border-emerald-500",
+          bg: "bg-emerald-500/10",
+          text: "text-emerald-700 dark:text-emerald-200",
+          hover: "hover:border-emerald-500 hover:text-emerald-600",
+        }
+      : {
+          border: "border-red-500",
+          bg: "bg-red-500/10",
+          text: "text-red-700 dark:text-red-200",
+          hover: "hover:border-red-500 hover:text-red-600",
+        };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {sorted.map((value) => {
+          const isSelected = selected.includes(value);
+          return (
+            <button
+              key={`${title}-${value}`}
+              type="button"
+              onClick={() => onToggle(value)}
+              className={cn(
+                "rounded-full border border-border bg-background px-4 py-1.5 text-sm font-medium shadow-xs transition",
+                toneClasses.hover,
+                isSelected && `${toneClasses.border} ${toneClasses.bg} ${toneClasses.text} shadow-sm`,
+              )}
+            >
+              {labels[value] ?? value}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-start gap-3 py-8">
+        <CardTitle className="text-lg">No recipes yet</CardTitle>
+        <CardDescription className="max-w-2xl">
+          Start with a keyword like “pasta” or a few ingredients like “tomato, basil, garlic”, or tap “I’m feeling
+          hungry” for a random pick.
+        </CardDescription>
+      </CardContent>
+    </Card>
+  );
+}
