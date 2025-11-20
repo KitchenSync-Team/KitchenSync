@@ -1,11 +1,22 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
+
+type SpoonacularRecipe = {
+  id: number;
+  title: string;
+  image: string;
+};
+
+type SearchResponse =
+  | { results: SpoonacularRecipe[]; cached?: boolean }
+  | { results: { results: SpoonacularRecipe[] }; cached?: boolean };
 
 export default function RecipeSearchTestPage() {
   const [query, setQuery] = useState("");
   const [ingredients, setIngredients] = useState("");
-  const [results, setResults] = useState<any>(null);
+  const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -21,12 +32,13 @@ export default function RecipeSearchTestPage() {
         body: JSON.stringify({ type: "keyword", query }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as SearchResponse;
       if (!res.ok) throw new Error(JSON.stringify(data));
 
       setResults(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,12 +61,13 @@ export default function RecipeSearchTestPage() {
         body: JSON.stringify({ type: "ingredients", ingredients: list }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as SearchResponse;
       if (!res.ok) throw new Error(JSON.stringify(data));
 
       setResults(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -63,10 +76,15 @@ export default function RecipeSearchTestPage() {
   // Normalize Spoonacular responses:
   // complexSearch → { results: [...] }
   // findByIngredients → [...]
-  function getRecipeList() {
+  function getRecipeList(): SpoonacularRecipe[] {
     if (!results) return [];
     if (Array.isArray(results.results)) return results.results; // ingredient search
-    if (results.results?.results) return results.results.results; // keyword search
+    if (
+      "results" in results.results &&
+      Array.isArray(results.results.results)
+    ) {
+      return results.results.results; // keyword search
+    }
     return [];
   }
 
@@ -175,7 +193,7 @@ export default function RecipeSearchTestPage() {
             marginTop: "20px",
           }}
         >
-          {recipeList.map((recipe: any) => (
+          {recipeList.map((recipe) => (
             <div
               key={recipe.id}
               style={{
@@ -186,9 +204,11 @@ export default function RecipeSearchTestPage() {
                 textAlign: "center",
               }}
             >
-              <img
+              <Image
                 src={recipe.image}
                 alt={recipe.title}
+                width={400}
+                height={250}
                 style={{
                   width: "100%",
                   height: "150px",

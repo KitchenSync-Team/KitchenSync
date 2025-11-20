@@ -106,10 +106,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ results: data, cached: false });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Recipe Search Error:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
-      { error: "Server error", detail: err.message },
+      { error: "Server error", detail: message },
       { status: 500 }
     );
   }
