@@ -12,6 +12,8 @@ export type NormalizedRecipe = {
   healthScore?: number | null;
   sourceUrl?: string | null;
   diets?: string[];
+  instructions?: string | null;
+  extendedIngredients?: NormalizedIngredient[];
   usedIngredientCount?: number;
   missedIngredientCount?: number;
   usedIngredients?: NormalizedIngredient[];

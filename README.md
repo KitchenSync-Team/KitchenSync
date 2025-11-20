@@ -81,6 +81,7 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 | `npm run dev`   | Start Next.js dev server (Turbopack) |
 | `npm run build` | Production build / type check        |
 | `npm run lint`  | ESLint (Next.js config)              |
+| `node scripts/fetch-recipe-info.cjs <id-or-url>` | Fetch a single Spoonacular recipe (reads `SPOONACULAR_API_KEY` from env or .env.local) |
 
 ## Testing Avatars Locally
 

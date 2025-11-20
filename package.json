@@ -4,7 +4,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "audit:recipe": "node scripts/fetch-recipe-info.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.934.0",

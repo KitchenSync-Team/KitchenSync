@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Loader2, Search, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,8 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const [error, setError] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailRecipe, setDetailRecipe] = useState<NormalizedRecipe | null>(null);
+  const [detailInfo, setDetailInfo] = useState<NormalizedRecipe | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [hungryLoading, setHungryLoading] = useState(false);
 
   const [selectedDiets, setSelectedDiets] = useState(preferences.dietaryPreferences ?? []);
@@ -137,6 +139,29 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setSelectedLikes(preferences.cuisineLikes ?? []);
     setSelectedDislikes(preferences.cuisineDislikes ?? []);
   };
+
+  useEffect(() => {
+    if (!detailRecipe) {
+      setDetailInfo(null);
+      setDetailLoading(false);
+      return;
+    }
+    setDetailLoading(true);
+    setDetailInfo(detailRecipe);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/recipes/${detailRecipe.id}`);
+        const data = await res.json();
+        if (res.ok && data) {
+          setDetailInfo((current) => ({ ...(current ?? detailRecipe), ...(data as NormalizedRecipe) }));
+        }
+      } catch {
+        // ignore detail fetch errors; we still show basic info
+      } finally {
+        setDetailLoading(false);
+      }
+    })();
+  }, [detailRecipe]);
 
   async function runSearch() {
     setLoading(true);
@@ -481,16 +506,17 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
               </div>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((recipe) => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  onViewDetails={(currentRecipe) => {
-                    setDetailRecipe(currentRecipe);
-                    setDetailOpen(true);
-                  }}
-                />
-              ))}
+        {results.map((recipe) => (
+          <RecipeCard
+            key={recipe.id}
+            recipe={recipe}
+            onViewDetails={(currentRecipe) => {
+              setDetailRecipe(currentRecipe);
+              setDetailInfo(currentRecipe);
+              setDetailOpen(true);
+            }}
+          />
+        ))}
             </div>
           </div>
         ) : (
@@ -499,29 +525,29 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
       </div>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{detailRecipe?.title ?? "Recipe details"}</DialogTitle>
+            <DialogTitle>{detailInfo?.title ?? detailRecipe?.title ?? "Recipe details"}</DialogTitle>
           </DialogHeader>
           {detailRecipe && (
-            <div className="space-y-4">
-              {detailRecipe.image && (
+            <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: "65vh" }}>
+              {detailInfo?.image && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={detailRecipe.image}
-                  alt={detailRecipe.title}
+                  src={detailInfo.image}
+                  alt={detailInfo.title}
                   className="h-56 w-full rounded-md object-cover"
                 />
               )}
               <div className="flex flex-wrap gap-2 text-xs">
-              {detailRecipe.readyInMinutes && (
-                <Badge variant="secondary">{detailRecipe.readyInMinutes} min</Badge>
-              )}
-              {(detailRecipe.diets ?? []).map((diet) => (
-                <Badge key={diet} variant="secondary">
-                  {diet}
-                </Badge>
-              ))}
+                {detailInfo?.readyInMinutes && (
+                  <Badge variant="secondary">{detailInfo.readyInMinutes} min</Badge>
+                )}
+                {(detailInfo?.diets ?? []).map((diet) => (
+                  <Badge key={diet} variant="secondary">
+                    {diet}
+                  </Badge>
+                ))}
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2 text-sm">
@@ -548,6 +574,32 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                     <p className="text-muted-foreground">None</p>
                   )}
                 </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p className="font-medium">Ingredients</p>
+                {detailInfo?.extendedIngredients && detailInfo.extendedIngredients.length > 0 ? (
+                  <ul className="space-y-1 text-muted-foreground">
+                    {detailInfo.extendedIngredients.map((ing) => (
+                      <li key={`ext-${ing.original}`}>{ing.original || ing.name}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">No ingredient list available.</p>
+                )}
+              </div>
+              <div className="space-y-2 text-sm">
+                <p className="font-medium">Instructions</p>
+                {detailLoading ? (
+                  <p className="text-muted-foreground">Loading instructions…</p>
+                ) : detailInfo?.instructions ? (
+                  <ol className="space-y-1 text-muted-foreground list-decimal list-inside">
+                    {formatInstructions(detailInfo.instructions).map((step, idx) => (
+                      <li key={`step-${idx}`}>{step}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-muted-foreground">No instructions provided.</p>
+                )}
               </div>
               {detailRecipe?.sourceUrl && (
                 <Button asChild variant="ghost" className="gap-2">
@@ -767,4 +819,17 @@ function EmptyState() {
       </CardContent>
     </Card>
   );
+}
+
+function stripHtml(value: string) {
+  return value.replace(/<[^>]*>/g, "");
+}
+
+function formatInstructions(raw: string): string[] {
+  const cleaned = stripHtml(raw)
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (cleaned.length > 0) return cleaned;
+  return [raw.trim()];
 }

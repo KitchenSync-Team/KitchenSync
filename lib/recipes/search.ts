@@ -182,6 +182,9 @@ export function normalizeRecipeResults(
     readyInMinutes: toNullableNumber(row.readyInMinutes),
     aggregateLikes: toNullableNumber(row.aggregateLikes),
     healthScore: toNullableNumber(row.healthScore),
+    instructions: typeof (row as { instructions?: unknown }).instructions === "string"
+      ? (row as { instructions?: string }).instructions
+      : undefined,
     diets: Array.isArray(row.diets)
       ? row.diets.filter((value): value is string => typeof value === "string")
       : [],
@@ -189,6 +192,7 @@ export function normalizeRecipeResults(
     missedIngredients: toNormalizedIngredients(
       (row as { missedIngredients?: unknown }).missedIngredients,
     ),
+    extendedIngredients: toNormalizedIngredients((row as { extendedIngredients?: unknown }).extendedIngredients),
     usedIngredientCount: (row as { usedIngredientCount?: number }).usedIngredientCount,
     missedIngredientCount: (row as { missedIngredientCount?: number }).missedIngredientCount,
     sourceUrl: buildRecipeUrl(row.title, row.id),
