@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     }
 
     // --- Build API URL ---
-    let url = "";
+    let url: string;
     if (type === "ingredients") {
       url =
         `${BASE_URL}/findByIngredients?ingredients=` +

@@ -20,6 +20,16 @@ export default function RecipeSearchTestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const buildErrorMessage = (data: unknown) => {
+    if (!data) return "Request failed";
+    if (typeof data === "string") return data;
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return "Request failed";
+    }
+  };
+
   async function searchKeyword() {
     setLoading(true);
     setError("");
@@ -32,10 +42,13 @@ export default function RecipeSearchTestPage() {
         body: JSON.stringify({ type: "keyword", query }),
       });
 
-      const data = (await res.json()) as SearchResponse;
-      if (!res.ok) throw new Error(JSON.stringify(data));
+      const data = (await res.json()) as unknown;
+      if (!res.ok) {
+        setError(buildErrorMessage(data));
+        return;
+      }
 
-      setResults(data);
+      setResults(data as SearchResponse);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
@@ -61,10 +74,13 @@ export default function RecipeSearchTestPage() {
         body: JSON.stringify({ type: "ingredients", ingredients: list }),
       });
 
-      const data = (await res.json()) as SearchResponse;
-      if (!res.ok) throw new Error(JSON.stringify(data));
+      const data = (await res.json()) as unknown;
+      if (!res.ok) {
+        setError(buildErrorMessage(data));
+        return;
+      }
 
-      setResults(data);
+      setResults(data as SearchResponse);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
