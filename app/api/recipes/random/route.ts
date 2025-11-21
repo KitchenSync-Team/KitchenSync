@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeRecipeResults } from "@/lib/recipes/search";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import { createClient } from "@/lib/supabase/server";
 
 const API_KEY = process.env.SPOONACULAR_API_KEY;
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
       if (excludeTags) params.set("exclude-tags", excludeTags);
 
       const url = `https://api.spoonacular.com/recipes/complexSearch?${params.toString()}&apiKey=${API_KEY}`;
-      const res = await fetch(url);
+      const res = await spoonacularFetch(url);
       const raw = await res.json();
 
       if (!res.ok) {
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
 
     const url = `https://api.spoonacular.com/recipes/random?${params.toString()}&apiKey=${API_KEY}`;
 
-    const res = await fetch(url);
+    const res = await spoonacularFetch(url);
     const raw = await res.json();
 
     if (!res.ok) {

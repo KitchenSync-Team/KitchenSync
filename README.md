@@ -61,6 +61,9 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (match anon key)
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
    - `S3_AVATARS_*` variables if you plan to test avatar uploads locally
+   - `OPENAI_API_KEY` (required for LLM-powered recipe details)
+   - `OPENAI_RECIPE_MODEL` (preferred model, defaults to `gpt-5.1`)
+   - `OPENAI_RECIPE_FALLBACK_MODEL` (optional fallback, defaults to `gpt-4.1-mini`)
    The middleware also accepts `SUPABASE_URL` / `SUPABASE_ANON_KEY` as fallbacks.
 
 4. **Run & lint**

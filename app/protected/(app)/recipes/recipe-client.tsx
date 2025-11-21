@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, Search, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ExternalLink, Loader2, Search, Sparkles, Timer, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { RecipeCard } from "@/components/recipes/recipe-card";
 import { RecipeCardSkeleton } from "@/components/recipes/recipe-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AppliedPreferences, NormalizedRecipe, RecipeSearchResponse } from "@/lib/recipes/types";
 import {
   ALLERGEN_OPTIONS,
@@ -51,6 +52,30 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const [detailInfo, setDetailInfo] = useState<NormalizedRecipe | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [hungryLoading, setHungryLoading] = useState(false);
+  const detailCacheRef = useRef<Map<number, NormalizedRecipe>>(new Map());
+  const inflightDetailsRef = useRef<Map<number, Promise<NormalizedRecipe>>>(new Map());
+  const prefetchAbortRef = useRef<{ generation: number }>({ generation: 0 });
+  const detailStandardized = detailInfo?.standardized ?? null;
+  const standardizedIngredients =
+    detailStandardized && detailStandardized.ingredients?.length
+      ? detailStandardized.ingredients
+      : null;
+  const standardizedSteps =
+    detailStandardized && detailStandardized.steps?.length ? detailStandardized.steps : null;
+  const fallbackInstructions =
+    !standardizedSteps && detailInfo?.instructions ? formatInstructions(detailInfo.instructions) : [];
+  const nutritionSnapshot = detailStandardized?.nutrition ?? null;
+  const showNutrition = Boolean(nutritionSnapshot && hasNutritionData(nutritionSnapshot));
+  const dietBadges = Array.from(
+    new Set([...(detailStandardized?.metadata?.diets ?? []), ...(detailInfo?.diets ?? [])]),
+  ).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const allergenBadges = (detailStandardized?.metadata?.tags ?? []).filter(
+    (tag): tag is string => typeof tag === "string" && /free|gluten|dairy|nut|soy|egg|shellfish|allergen/i.test(tag),
+  );
+  const totalMinutes = detailStandardized?.metadata?.totalMinutes ?? detailInfo?.readyInMinutes ?? null;
+  const prepMinutes = detailStandardized?.metadata?.prepMinutes ?? null;
+  const cookMinutes = detailStandardized?.metadata?.cookMinutes ?? null;
+  const servings = detailStandardized?.metadata?.servings ?? null;
 
   const [selectedDiets, setSelectedDiets] = useState(preferences.dietaryPreferences ?? []);
   const [selectedAllergens, setSelectedAllergens] = useState(preferences.allergens ?? []);
@@ -140,32 +165,102 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setSelectedDislikes(preferences.cuisineDislikes ?? []);
   };
 
+  const fetchRecipeDetails = useCallback(
+    async (recipe: NormalizedRecipe): Promise<NormalizedRecipe> => {
+      const cached = detailCacheRef.current.get(recipe.id);
+      if (cached) return cached;
+
+      const inflight = inflightDetailsRef.current.get(recipe.id);
+      if (inflight) return inflight;
+
+      const request = (async () => {
+        try {
+          const res = await fetch(`/api/recipes/${recipe.id}`);
+          const data = await res.json();
+          if (res.ok && data) {
+            const merged: NormalizedRecipe = { ...recipe, ...(data as NormalizedRecipe) };
+            detailCacheRef.current.set(recipe.id, merged);
+            return merged;
+          }
+        } catch {
+          // ignore detail fetch errors; we still show basic info
+        }
+        return recipe;
+      })();
+
+      inflightDetailsRef.current.set(recipe.id, request);
+      try {
+        return await request;
+      } finally {
+        inflightDetailsRef.current.delete(recipe.id);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!detailRecipe) {
       setDetailInfo(null);
       setDetailLoading(false);
       return;
     }
+
+    const cached = detailCacheRef.current.get(detailRecipe.id);
+    if (cached) {
+      setDetailInfo(cached);
+      setDetailLoading(false);
+      return;
+    }
+
     setDetailLoading(true);
     setDetailInfo(detailRecipe);
-    void (async () => {
-      try {
-        const res = await fetch(`/api/recipes/${detailRecipe.id}`);
-        const data = await res.json();
-        if (res.ok && data) {
-          setDetailInfo((current) => ({ ...(current ?? detailRecipe), ...(data as NormalizedRecipe) }));
+
+    let cancelled = false;
+    void fetchRecipeDetails(detailRecipe)
+      .then((merged) => {
+        if (!cancelled) {
+          setDetailInfo(merged);
         }
-      } catch {
-        // ignore detail fetch errors; we still show basic info
-      } finally {
-        setDetailLoading(false);
-      }
-    })();
-  }, [detailRecipe]);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailRecipe, fetchRecipeDetails]);
+
+  const prefetchRecipeDetails = useCallback(
+    (recipe: NormalizedRecipe) => {
+      if (detailCacheRef.current.has(recipe.id)) return;
+      void fetchRecipeDetails(recipe);
+    },
+    [fetchRecipeDetails],
+  );
+
+  const prefetchBatchDetails = useCallback(
+    (recipes: NormalizedRecipe[], generation: number) => {
+      const runSequential = async (index: number) => {
+        if (prefetchAbortRef.current.generation !== generation) return;
+        if (index >= recipes.length) return;
+        const recipe = recipes[index];
+        if (!detailCacheRef.current.has(recipe.id)) {
+          await fetchRecipeDetails(recipe);
+        }
+        setTimeout(() => runSequential(index + 1), 200);
+      };
+      void runSequential(0);
+    },
+    [fetchRecipeDetails],
+  );
 
   async function runSearch() {
     setLoading(true);
     setError(null);
+    prefetchAbortRef.current.generation += 1;
 
     const includeIngredients = ingredientsInput
       .split(",")
@@ -207,6 +302,13 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
       }
 
       setResults(Array.isArray(data.results) ? data.results : []);
+      if (Array.isArray(data.results)) {
+        const nextGeneration = prefetchAbortRef.current.generation;
+        prefetchBatchDetails(
+          data.results.slice(0, 12).map((recipe: NormalizedRecipe) => ({ ...recipe })),
+          nextGeneration,
+        );
+      }
       setMeta({
         totalResults: typeof data.totalResults === "number" ? data.totalResults : 0,
         cached: data.cached === true,
@@ -230,6 +332,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   async function runHungry() {
     setHungryLoading(true);
     setError(null);
+    prefetchAbortRef.current.generation += 1;
 
     const includeTags = [...selectedDiets, ...selectedAllergens, ...selectedLikes].filter(Boolean);
     const excludeTags = [...selectedDislikes].filter(Boolean);
@@ -284,6 +387,13 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
       }
 
       setResults(nextResults);
+      if (nextResults.length > 0) {
+        const nextGeneration = prefetchAbortRef.current.generation;
+        prefetchBatchDetails(
+          nextResults.slice(0, 12).map((recipe: NormalizedRecipe) => ({ ...recipe })),
+          nextGeneration,
+        );
+      }
       setMeta({
         totalResults: nextResults.length,
         cached: false,
@@ -511,10 +621,13 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
             key={recipe.id}
             recipe={recipe}
             onViewDetails={(currentRecipe) => {
-              setDetailRecipe(currentRecipe);
-              setDetailInfo(currentRecipe);
+              const recipeSnapshot: NormalizedRecipe = { ...currentRecipe };
+              const cached = detailCacheRef.current.get(recipeSnapshot.id);
+              setDetailRecipe(recipeSnapshot);
+              setDetailInfo(cached ?? recipeSnapshot);
               setDetailOpen(true);
             }}
+            onHover={(hoverRecipe) => prefetchRecipeDetails(hoverRecipe)}
           />
         ))}
             </div>
@@ -536,75 +649,166 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                 <img
                   src={detailInfo.image}
                   alt={detailInfo.title}
-                  className="h-56 w-full rounded-md object-cover"
+                  className="w-full max-h-[420px] rounded-xl object-cover"
                 />
               )}
-              <div className="flex flex-wrap gap-2 text-xs">
-                {detailInfo?.readyInMinutes && (
-                  <Badge variant="secondary">{detailInfo.readyInMinutes} min</Badge>
-                )}
-                {(detailInfo?.diets ?? []).map((diet) => (
-                  <Badge key={diet} variant="secondary">
-                    {diet}
-                  </Badge>
-                ))}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium">Uses</p>
-                  {detailRecipe.usedIngredients && detailRecipe.usedIngredients.length > 0 ? (
-                    <ul className="space-y-1 text-muted-foreground">
-                      {detailRecipe.usedIngredients.map((ing) => (
-                        <li key={`used-${ing.original}`}>{ing.original || ing.name}</li>
+              <MetadataPanel
+                totalMinutes={totalMinutes}
+                prepMinutes={prepMinutes}
+                cookMinutes={cookMinutes}
+                servings={servings}
+                dietBadges={dietBadges}
+                allergenBadges={allergenBadges}
+                loading={detailLoading}
+              />
+              <div className="space-y-4">
+                <DetailSectionCard title="Ingredients">
+                  {detailLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <Skeleton key={`ingredient-skeleton-${idx}`} className="h-4 w-full" />
+                      ))}
+                    </div>
+                  ) : standardizedIngredients ? (
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      {standardizedIngredients.map((ing, idx) => {
+                        const formattedQuantity = formatQuantity(ing.quantity);
+                        return (
+                          <li key={`std-ing-${ing.name}-${idx}`}>
+                            <span className="font-medium text-foreground">{ing.name}</span>
+                            {formattedQuantity && (
+                              <span className="ml-2">
+                                {formattedQuantity}
+                                {ing.unit ? ` ${ing.unit}` : ""}
+                              </span>
+                            )}
+                            {ing.preparation && <span className="ml-1">({ing.preparation})</span>}
+                            {ing.notes && <span className="ml-1 text-xs">— {ing.notes}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : detailInfo?.extendedIngredients && detailInfo.extendedIngredients.length > 0 ? (
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      {detailInfo.extendedIngredients.map((ing, idx) => (
+                        <li key={`ext-${idx}`}>{ing.original || ing.name}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-muted-foreground">None</p>
+                    <p className="text-sm text-muted-foreground">No ingredient list available.</p>
                   )}
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium">Missing</p>
-                  {detailRecipe.missedIngredients && detailRecipe.missedIngredients.length > 0 ? (
-                    <ul className="space-y-1 text-muted-foreground">
-                      {detailRecipe.missedIngredients.map((ing) => (
-                        <li key={`miss-${ing.original}`}>{ing.original || ing.name}</li>
+                </DetailSectionCard>
+
+                <DetailSectionCard title="Instructions">
+                  {detailLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 4 }).map((_, idx) => (
+                        <Skeleton key={`instruction-skeleton-${idx}`} className="h-4 w-full" />
+                      ))}
+                    </div>
+                  ) : standardizedSteps ? (
+                    <ol className="space-y-3 text-sm text-muted-foreground list-decimal list-outside pl-4">
+                      {standardizedSteps.map((step) => (
+                        <li key={`std-step-${step.number}`} className="marker:text-muted-foreground">
+                          <div className="text-foreground">{step.instruction}</div>
+                          {(step.durationMinutes ||
+                            (step.ingredients && step.ingredients.length > 0) ||
+                            (step.equipment && step.equipment.length > 0) ||
+                            step.tips) && (
+                            <div className="mt-1 space-y-1 text-xs text-muted-foreground/80">
+                              {step.durationMinutes && (
+                                <p>Duration: {formatDuration(step.durationMinutes)}</p>
+                              )}
+                              {step.ingredients && step.ingredients.length > 0 && (
+                                <p>Ingredients: {step.ingredients.join(", ")}</p>
+                              )}
+                              {step.equipment && step.equipment.length > 0 && (
+                                <p>Equipment: {step.equipment.join(", ")}</p>
+                              )}
+                              {step.tips && <p>Tip: {step.tips}</p>}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : fallbackInstructions.length > 0 ? (
+                    <ol className="space-y-1 text-sm text-muted-foreground list-decimal list-outside pl-4">
+                      {fallbackInstructions.map((step, idx) => (
+                        <li key={`step-${idx}`} className="marker:text-muted-foreground">
+                          <div className="text-foreground">{step}</div>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No instructions provided.</p>
+                  )}
+                </DetailSectionCard>
+
+                <DetailSectionCard title="Pantry match">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On hand</p>
+                      {detailRecipe.usedIngredients && detailRecipe.usedIngredients.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                          {detailRecipe.usedIngredients.map((ing) => (
+                            <li key={`used-${ing.original}`}>{ing.original || ing.name}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No pantry items used.</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Still need</p>
+                      {detailRecipe.missedIngredients && detailRecipe.missedIngredients.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                          {detailRecipe.missedIngredients.map((ing) => (
+                            <li key={`miss-${ing.original}`}>{ing.original || ing.name}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Everything is in your kitchen.</p>
+                      )}
+                    </div>
+                  </div>
+                </DetailSectionCard>
+
+                {showNutrition && nutritionSnapshot && (
+                  <DetailSectionCard title="Nutrition">
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      {"calories" in nutritionSnapshot && typeof nutritionSnapshot.calories === "number" && (
+                        <li>Calories: {Math.round(nutritionSnapshot.calories)}</li>
+                      )}
+                      {"proteinGrams" in nutritionSnapshot &&
+                        typeof nutritionSnapshot.proteinGrams === "number" && (
+                          <li>Protein: {nutritionSnapshot.proteinGrams} g</li>
+                        )}
+                      {"carbsGrams" in nutritionSnapshot &&
+                        typeof nutritionSnapshot.carbsGrams === "number" && (
+                          <li>Carbs: {nutritionSnapshot.carbsGrams} g</li>
+                        )}
+                      {"fatGrams" in nutritionSnapshot && typeof nutritionSnapshot.fatGrams === "number" && (
+                        <li>Fat: {nutritionSnapshot.fatGrams} g</li>
+                      )}
+                    </ul>
+                  </DetailSectionCard>
+                )}
+
+                {detailStandardized?.notes && detailStandardized.notes.length > 0 && (
+                  <DetailSectionCard title="Notes">
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      {detailStandardized.notes.map((note, idx) => (
+                        <li key={`note-${idx}`}>{note}</li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="text-muted-foreground">None</p>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2 text-sm">
-                <p className="font-medium">Ingredients</p>
-                {detailInfo?.extendedIngredients && detailInfo.extendedIngredients.length > 0 ? (
-                  <ul className="space-y-1 text-muted-foreground">
-                    {detailInfo.extendedIngredients.map((ing) => (
-                      <li key={`ext-${ing.original}`}>{ing.original || ing.name}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">No ingredient list available.</p>
+                  </DetailSectionCard>
                 )}
               </div>
-              <div className="space-y-2 text-sm">
-                <p className="font-medium">Instructions</p>
-                {detailLoading ? (
-                  <p className="text-muted-foreground">Loading instructions…</p>
-                ) : detailInfo?.instructions ? (
-                  <ol className="space-y-1 text-muted-foreground list-decimal list-inside">
-                    {formatInstructions(detailInfo.instructions).map((step, idx) => (
-                      <li key={`step-${idx}`}>{step}</li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="text-muted-foreground">No instructions provided.</p>
-                )}
-              </div>
+
               {detailRecipe?.sourceUrl && (
                 <Button asChild variant="ghost" className="gap-2">
                   <a href={detailRecipe.sourceUrl} target="_blank" rel="noreferrer">
-                    Open recipe
+                    View source
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
@@ -819,6 +1023,139 @@ function EmptyState() {
       </CardContent>
     </Card>
   );
+}
+
+function DetailSectionCard({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+function MetadataPanel({
+  totalMinutes,
+  prepMinutes,
+  cookMinutes,
+  servings,
+  dietBadges,
+  allergenBadges,
+  loading = false,
+}: {
+  totalMinutes: number | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  servings: number | null;
+  dietBadges: string[];
+  allergenBadges: string[];
+  loading?: boolean;
+}) {
+  const hasTiming = Boolean(totalMinutes || prepMinutes || cookMinutes || servings);
+  const hasBadges = dietBadges.length > 0 || allergenBadges.length > 0;
+  const shouldRender = loading || hasTiming || hasBadges;
+  if (!shouldRender) return null;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card/60 p-3 shadow-sm">
+      {loading ? (
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <Skeleton key={`meta-pill-${idx}`} className="h-7 w-28 rounded-full" />
+          ))}
+        </div>
+      ) : hasTiming ? (
+        <div className="flex flex-wrap gap-2">
+          {totalMinutes && (
+            <MetricPill label="Total" value={`${totalMinutes} min`} icon={Timer} tone="accent" />
+          )}
+          {prepMinutes && <MetricPill label="Prep" value={`${prepMinutes} min`} />}
+          {cookMinutes && <MetricPill label="Cook" value={`${cookMinutes} min`} />}
+          {servings && <MetricPill label="Serves" value={String(servings)} />}
+        </div>
+      ) : null}
+      {loading ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <Skeleton key={`meta-tag-${idx}`} className="h-5 w-20 rounded-full" />
+          ))}
+        </div>
+      ) : hasBadges ? (
+        <div className={cn("flex flex-wrap gap-2 text-xs", hasTiming && "mt-2")}>
+          {dietBadges.map((tag) => (
+            <Badge key={`diet-${tag}`} variant="outline" className="capitalize">
+              {tag}
+            </Badge>
+          ))}
+          {allergenBadges.map((tag) => (
+            <Badge key={`allergen-${tag}`} variant="secondary" className="capitalize">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {!hasTiming && !hasBadges && loading && (
+        <Skeleton className="mt-2 h-4 w-32 rounded-full" />
+      )}
+    </div>
+  );
+}
+
+function MetricPill({
+  label,
+  value,
+  icon: Icon,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  icon?: typeof Timer;
+  tone?: "neutral" | "accent";
+}) {
+  const toneClasses =
+    tone === "accent"
+      ? "bg-primary/10 text-primary border-primary/30"
+      : "bg-muted/70 text-muted-foreground border-border";
+  return (
+    <div className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${toneClasses}`}>
+      {Icon && <Icon className="h-3.5 w-3.5" />}
+      <div className="flex flex-col leading-tight">
+        <span className="uppercase tracking-wide text-[10px]">{label}</span>
+        <span className="font-semibold text-sm text-foreground">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+
+function formatQuantity(quantity?: number | null) {
+  if (typeof quantity !== "number" || Number.isNaN(quantity)) return null;
+  if (Number.isInteger(quantity)) return quantity.toString();
+  return quantity.toFixed(2).replace(/\.00$/, "");
+}
+
+function formatDuration(minutes?: number | null) {
+  if (typeof minutes !== "number" || Number.isNaN(minutes)) return null;
+  if (minutes >= 60) {
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+  }
+  return `${minutes} min`;
+}
+
+function hasNutritionData(value: Record<string, unknown>) {
+  return Object.values(value).some((entry) => typeof entry === "number" && Number.isFinite(entry));
 }
 
 function stripHtml(value: string) {

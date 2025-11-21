@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { buildRecipeSearch, normalizeRecipeResults } from "@/lib/recipes/search";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import type { RecipeSearchPayload, RecipeSearchResponse } from "@/lib/recipes/types";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createClient } from "@/lib/supabase/server";
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...cachedPayload, cached: true });
     }
 
-    const apiRes = await fetch(url);
+    const apiRes = await spoonacularFetch(url);
     const rawData = await apiRes.json();
 
     if (!apiRes.ok) {

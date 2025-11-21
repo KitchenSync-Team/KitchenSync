@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ExternalLink, Leaf, Timer } from "lucide-react";
+import { Leaf, Timer } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,15 +10,20 @@ import { cn } from "@/lib/supabase/utils";
 type Props = {
   recipe: NormalizedRecipe;
   onViewDetails?: (recipe: NormalizedRecipe) => void;
+  onHover?: (recipe: NormalizedRecipe) => void;
 };
 
-export function RecipeCard({ recipe, onViewDetails }: Props) {
+export function RecipeCard({ recipe, onViewDetails, onHover }: Props) {
   const usedCount = recipe.usedIngredientCount ?? recipe.usedIngredients?.length ?? 0;
   const missedCount = recipe.missedIngredientCount ?? recipe.missedIngredients?.length ?? 0;
   const diets = recipe.diets ?? [];
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden">
+    <Card
+      className="flex h-full flex-col overflow-hidden"
+      onMouseEnter={() => onHover?.(recipe)}
+      onFocus={() => onHover?.(recipe)}
+    >
       <div className="relative aspect-video w-full overflow-hidden bg-muted">
         {recipe.image ? (
           <Image
@@ -72,15 +77,7 @@ export function RecipeCard({ recipe, onViewDetails }: Props) {
         <div className="mt-auto flex items-center justify-end gap-2 pt-2">
           {onViewDetails && (
             <Button variant="outline" size="sm" onClick={() => onViewDetails(recipe)}>
-              Details
-            </Button>
-          )}
-          {recipe.sourceUrl && (
-            <Button asChild variant="ghost" size="sm" className="gap-2">
-              <a href={recipe.sourceUrl} target="_blank" rel="noreferrer">
-                View recipe
-                <ExternalLink className="h-4 w-4" />
-              </a>
+              View recipe
             </Button>
           )}
         </div>
