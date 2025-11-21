@@ -209,21 +209,18 @@ function isModelMissingError(err: unknown) {
   const message =
     (err as { message?: string }).message ?? (err instanceof Error ? err.message : "");
 
-  if (code === "model_not_found") return true;
-  if (status === 404) return true;
-  if (/does not exist|have access/i.test(message ?? "")) {
-    return true;
-  }
-  return false;
+  return (
+    code === "model_not_found" ||
+    status === 404 ||
+    /does not exist|have access/i.test(message ?? "")
+  );
 }
 
 function isRateLimitError(err: unknown) {
   if (!err || typeof err !== "object") return false;
   const status = "status" in err ? (err as { status?: number }).status : undefined;
   const code = "code" in err ? (err as { code?: string }).code : undefined;
-  if (status === 429) return true;
-  if (code === "rate_limit_exceeded") return true;
-  return false;
+  return status === 429 || code === "rate_limit_exceeded";
 }
 
 async function executeWithBackoff<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {

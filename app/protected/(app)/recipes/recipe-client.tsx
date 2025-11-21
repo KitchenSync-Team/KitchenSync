@@ -68,9 +68,9 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const showNutrition = Boolean(nutritionSnapshot && hasNutritionData(nutritionSnapshot));
   const dietBadges = Array.from(
     new Set([...(detailStandardized?.metadata?.diets ?? []), ...(detailInfo?.diets ?? [])]),
-  ).filter((value) => typeof value === "string" && value.trim().length > 0);
-  const allergenBadges = (detailStandardized?.metadata?.tags ?? []).filter(
-    (tag) => typeof tag === "string" && /free|gluten|dairy|nut|soy|egg|shellfish|allergen/i.test(tag),
+  ).filter((value) => value.trim().length > 0);
+  const allergenBadges = (detailStandardized?.metadata?.tags ?? []).filter((tag) =>
+    /free|gluten|dairy|nut|soy|egg|shellfish|allergen/i.test(tag),
   );
   const totalMinutes = detailStandardized?.metadata?.totalMinutes ?? detailInfo?.readyInMinutes ?? null;
   const prepMinutes = detailStandardized?.metadata?.prepMinutes ?? null;
