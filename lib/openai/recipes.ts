@@ -204,22 +204,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isModelMissingError(err: unknown) {
   if (!err || typeof err !== "object") return false;
-  const status =
-    "status" in err && typeof (err as { status?: number }).status === "number"
-      ? (err as { status?: number }).status
-      : undefined;
-  const code =
-    "code" in err && typeof (err as { code?: string }).code === "string"
-      ? (err as { code?: string }).code
-      : undefined;
+  const status = "status" in err ? (err as { status?: number }).status : undefined;
+  const code = "code" in err ? (err as { code?: string }).code : undefined;
   const message =
-    (err as { message?: string }).message ??
-    (err instanceof Error ? err.message : undefined) ??
-    "";
+    (err as { message?: string }).message ?? (err instanceof Error ? err.message : "");
 
   if (code === "model_not_found") return true;
   if (status === 404) return true;
-  if (typeof message === "string" && /does not exist|have access/i.test(message)) {
+  if (/does not exist|have access/i.test(message ?? "")) {
     return true;
   }
   return false;
@@ -227,14 +219,8 @@ function isModelMissingError(err: unknown) {
 
 function isRateLimitError(err: unknown) {
   if (!err || typeof err !== "object") return false;
-  const status =
-    "status" in err && typeof (err as { status?: number }).status === "number"
-      ? (err as { status?: number }).status
-      : undefined;
-  const code =
-    "code" in err && typeof (err as { code?: string }).code === "string"
-      ? (err as { code?: string }).code
-      : undefined;
+  const status = "status" in err ? (err as { status?: number }).status : undefined;
+  const code = "code" in err ? (err as { code?: string }).code : undefined;
   if (status === 429) return true;
   if (code === "rate_limit_exceeded") return true;
   return false;
@@ -310,7 +296,7 @@ function normalizeSteps(steps: StandardizedRecipeDetails["steps"]) {
   const expanded: typeof steps = [];
 
   steps?.forEach((step) => {
-    if (!step || typeof step.instruction !== "string") return;
+    if (!step) return;
     const trimmed = step.instruction.trim();
     if (!trimmed) return;
 
