@@ -39,7 +39,9 @@ export function normalizeIngredientInfo(data: unknown, cacheKey?: string): Ingre
     aisle: typeof payload.aisle === "string" ? payload.aisle : null,
     image: normalizeImage(payload.image),
     possibleUnits: Array.isArray(payload.possibleUnits)
-      ? payload.possibleUnits.filter((value): value is string => typeof value === "string")
+      ? payload.possibleUnits
+          .map((unit) => unit.trim())
+          .filter((unit) => unit.length > 0)
       : [],
     nutrition: payload.nutrition ?? undefined,
     cacheKey,
