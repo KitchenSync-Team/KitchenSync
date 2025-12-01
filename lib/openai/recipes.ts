@@ -87,6 +87,50 @@ export async function standardizeRecipeDetails(
   return null;
 }
 
+export function buildFallbackStandardized(
+  input: StandardizeInput,
+): StandardizedRecipeDetails | null {
+  const instructions =
+    normalizeAnalyzedInstructions(input.sourcePayload) ??
+    normalizeInstructionText(input.normalized.instructions);
+
+  const ingredients = normalizeIngredients(input.normalized);
+
+  const metadata: StandardizedRecipeDetails["metadata"] = {
+    title: input.normalized.title,
+    summary: null,
+    servings: toOptionalNumber((input.sourcePayload as { servings?: unknown })?.servings),
+    prepMinutes: null,
+    cookMinutes: null,
+    totalMinutes: input.normalized.readyInMinutes ?? null,
+    cuisines: [],
+    diets: input.normalized.diets ?? [],
+    tags: [],
+  };
+
+  if (!ingredients && !instructions) {
+    return null;
+  }
+
+  return {
+    metadata,
+    ingredients: ingredients ?? [],
+    steps: instructions ?? [],
+    equipment: [],
+    nutrition: undefined,
+    notes: [],
+    source: {
+      id: input.recipeId,
+      url: input.normalized.sourceUrl ?? undefined,
+      provider: "spoonacular",
+    },
+    model: {
+      name: "fallback",
+      promptVersion: PROMPT_VERSION,
+    },
+  };
+}
+
 function safeStringify(value: unknown, maxLength = 12000) {
   const raw = JSON.stringify(value ?? {});
   if (raw.length <= maxLength) return raw;
@@ -238,6 +282,67 @@ async function executeWithBackoff<T>(fn: () => Promise<T>, attempts = 3): Promis
     }
   }
   throw lastError ?? new Error("Failed to execute request");
+}
+
+function normalizeInstructionText(raw: unknown): StandardizedRecipeDetails["steps"] | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const cleaned = raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const parts = cleaned
+    .split(/(?<=[.?!])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const steps = (parts.length > 0 ? parts : [cleaned]).map((instruction, idx) => ({
+    number: idx + 1,
+    instruction,
+  }));
+  return steps;
+}
+
+function normalizeAnalyzedInstructions(raw: unknown): StandardizedRecipeDetails["steps"] | null {
+  if (!Array.isArray(raw)) return null;
+  const first = raw[0];
+  if (!first || typeof first !== "object") return null;
+  const steps = Array.isArray((first as { steps?: unknown }).steps)
+    ? ((first as { steps?: unknown }).steps as unknown[])
+    : [];
+  const normalized = steps
+    .map((step, idx) => {
+      if (!step || typeof step !== "object") return null;
+      const text = (step as { step?: unknown }).step;
+      if (typeof text !== "string" || !text.trim()) return null;
+      const n = (step as { number?: unknown }).number;
+      return {
+        number: Number.isFinite(n) ? (n as number) : idx + 1,
+        instruction: text.trim(),
+      };
+    })
+    .filter(Boolean) as { number: number; instruction: string }[];
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeIngredients(
+  normalized: NormalizedRecipe,
+): StandardizedRecipeDetails["ingredients"] | null {
+  const ingredients =
+    normalized.extendedIngredients ??
+    normalized.usedIngredients ??
+    normalized.missedIngredients ??
+    null;
+  if (!ingredients || ingredients.length === 0) return null;
+  return ingredients
+    .map((ing) => ({
+      name: ing.name,
+      quantity: null,
+      unit: null,
+      preparation: null,
+      notes: ing.original !== ing.name ? ing.original : null,
+      pantryCategory: null,
+    }))
+    .filter((ing) => ing.name && ing.name.trim().length > 0);
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function normalizeResponseText(value: string | string[] | null | undefined) {

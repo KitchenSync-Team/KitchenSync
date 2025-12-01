@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import { buildFallbackStandardized, standardizeRecipeDetails } from "@/lib/openai/recipes";
 import { normalizeRecipeResults } from "@/lib/recipes/search";
 import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 
@@ -36,7 +37,33 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       totalResults: 1,
     });
 
-    return NextResponse.json(results[0] ?? null);
+    const recipe = results[0] ?? null;
+
+    if (recipe) {
+      try {
+        const standardized = await standardizeRecipeDetails({
+          recipeId,
+          normalized: recipe,
+          sourcePayload: raw,
+        });
+        if (standardized) {
+          recipe.standardized = standardized;
+        } else {
+          const fallback = buildFallbackStandardized({
+            recipeId,
+            normalized: recipe,
+            sourcePayload: raw,
+          });
+          if (fallback) {
+            recipe.standardized = fallback;
+          }
+        }
+      } catch (err) {
+        console.error("Recipe standardization error:", err);
+      }
+    }
+
+    return NextResponse.json(recipe);
   } catch (err) {
     console.error("Recipe info error:", err);
     const detail = err instanceof Error ? err.message : "Unknown error";
