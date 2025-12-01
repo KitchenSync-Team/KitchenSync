@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 
+import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 type SpoonacularProductSearch = {
@@ -20,25 +21,23 @@ export type GrocerySearchResponse = {
   cacheKey?: string;
 };
 
-const BASE_URL = "https://api.spoonacular.com/food/products/search";
-
 export function buildGrocerySearch({
   query,
   number = 12,
-  apiKey,
+  client,
 }: {
   query: string;
   number?: number;
-  apiKey: string;
+  client: SpoonacularClient;
 }) {
   const params = new URLSearchParams();
   params.set("query", query);
   params.set("number", String(clamp(number, 1, 24)));
 
-  const url = `${BASE_URL}?${params.toString()}&apiKey=${apiKey}`;
+  const url = buildSpoonacularUrl(client, "/food/products/search", params);
   const rawCacheKey = JSON.stringify({ query, number });
   const cacheKey = `groceries:${hashKey(rawCacheKey)}`;
-  return { url, cacheKey };
+  return { url, cacheKey, headers: client.headers };
 }
 
 export function normalizeGrocerySearch(data: unknown, cacheKey?: string): GrocerySearchResponse {

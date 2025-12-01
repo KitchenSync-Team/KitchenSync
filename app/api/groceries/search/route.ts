@@ -9,13 +9,16 @@ import {
   writeGroceryCache,
 } from "@/lib/groceries/search";
 import { createClient } from "@/lib/supabase/server";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function POST(req: NextRequest) {
   try {
-    if (!API_KEY) {
-      return NextResponse.json({ error: "Spoonacular API key missing" }, { status: 500 });
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
+      return NextResponse.json({ error: "Spoonacular API key missing", detail }, { status: 500 });
     }
 
     const supabase = await createClient();
@@ -34,7 +37,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
-    const { url, cacheKey } = buildGrocerySearch({ query, apiKey: API_KEY, number });
+    const { url, cacheKey, headers } = buildGrocerySearch({ query, client, number });
 
     const { data: cacheHit, error: cacheError } = await readGroceryCache(cacheKey);
     if (cacheError) {
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cachedPayload);
     }
 
-    const apiRes = await fetch(url);
+    const apiRes = await fetch(url, { headers });
     const raw = await apiRes.json();
     if (!apiRes.ok) {
       return NextResponse.json({ error: "Spoonacular error", detail: raw }, { status: apiRes.status });

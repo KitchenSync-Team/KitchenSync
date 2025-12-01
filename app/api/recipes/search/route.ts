@@ -5,14 +5,17 @@ import { buildRecipeSearch, normalizeRecipeResults } from "@/lib/recipes/search"
 import type { RecipeSearchPayload, RecipeSearchResponse } from "@/lib/recipes/types";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createClient } from "@/lib/supabase/server";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function POST(req: NextRequest) {
   try {
-    if (!API_KEY) {
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
       return NextResponse.json(
-        { error: "Spoonacular API key is not configured on the server." },
+        { error: "Spoonacular API key is not configured on the server.", detail },
         { status: 500 },
       );
     }
@@ -63,14 +66,14 @@ export async function POST(req: NextRequest) {
           cuisineDislikes: payload.cuisineDislikes,
         },
         userId: user.id,
-        apiKey: API_KEY,
+        client,
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Invalid recipe search payload";
       return NextResponse.json({ error: detail }, { status: 400 });
     }
 
-    const { endpoint, url, cacheKey, applied } = searchConfig;
+    const { endpoint, url, cacheKey, applied, headers } = searchConfig;
 
     const admin = createServiceRoleClient();
 
@@ -95,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...cachedPayload, cached: true });
     }
 
-    const apiRes = await fetch(url);
+    const apiRes = await fetch(url, { headers });
     const rawData = await apiRes.json();
 
     if (!apiRes.ok) {

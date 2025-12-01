@@ -2,13 +2,16 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeRecipeResults } from "@/lib/recipes/search";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    if (!API_KEY) {
-      return NextResponse.json({ error: "Spoonacular API key missing" }, { status: 500 });
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
+      return NextResponse.json({ error: "Spoonacular API key missing", detail }, { status: 500 });
     }
 
     const { id } = await context.params;
@@ -17,8 +20,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Invalid recipe id" }, { status: 400 });
     }
 
-    const url = `https://api.spoonacular.com/recipes/${recipeId}/information?includeNutrition=true&apiKey=${API_KEY}`;
-    const res = await fetch(url);
+    const params = new URLSearchParams();
+    params.set("includeNutrition", "true");
+    const url = buildSpoonacularUrl(client, `/recipes/${recipeId}/information`, params);
+
+    const res = await fetch(url, { headers: client.headers });
     const raw = await res.json();
 
     if (!res.ok) {

@@ -3,13 +3,16 @@ import { NextResponse } from "next/server";
 
 import { normalizeRecipeResults } from "@/lib/recipes/search";
 import { createClient } from "@/lib/supabase/server";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function GET(req: NextRequest) {
   try {
-    if (!API_KEY) {
-      return NextResponse.json({ error: "Spoonacular API key missing" }, { status: 500 });
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
+      return NextResponse.json({ error: "Spoonacular API key missing", detail }, { status: 500 });
     }
 
     const supabase = await createClient();
@@ -64,8 +67,8 @@ export async function GET(req: NextRequest) {
       if (includeTags) params.set("include-tags", includeTags);
       if (excludeTags) params.set("exclude-tags", excludeTags);
 
-      const url = `https://api.spoonacular.com/recipes/complexSearch?${params.toString()}&apiKey=${API_KEY}`;
-      const res = await fetch(url);
+      const url = buildSpoonacularUrl(client, "/recipes/complexSearch", params);
+      const res = await fetch(url, { headers: client.headers });
       const raw = await res.json();
 
       if (!res.ok) {
@@ -84,9 +87,9 @@ export async function GET(req: NextRequest) {
     const params = new URLSearchParams();
     params.set("number", String(number));
 
-    const url = `https://api.spoonacular.com/recipes/random?${params.toString()}&apiKey=${API_KEY}`;
+    const url = buildSpoonacularUrl(client, "/recipes/random", params);
 
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: client.headers });
     const raw = await res.json();
 
     if (!res.ok) {

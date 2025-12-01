@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 
+import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 type SpoonacularIngredientInfo = {
@@ -21,10 +22,12 @@ export type IngredientInfo = {
   cacheKey?: string;
 };
 
-export function buildIngredientInfoUrl(id: number, apiKey: string) {
-  const url = `https://api.spoonacular.com/food/ingredients/${id}/information?amount=1&apiKey=${apiKey}`;
+export function buildIngredientInfoUrl(id: number, client: SpoonacularClient) {
+  const params = new URLSearchParams();
+  params.set("amount", "1");
+  const url = buildSpoonacularUrl(client, `/food/ingredients/${id}/information`, params);
   const cacheKey = `ingredient-info:${hashKey(String(id))}`;
-  return { url, cacheKey };
+  return { url, cacheKey, headers: client.headers };
 }
 
 export function normalizeIngredientInfo(data: unknown, cacheKey?: string): IngredientInfo | null {

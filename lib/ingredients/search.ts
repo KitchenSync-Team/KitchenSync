@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 
+import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 import type { IngredientSearchResponse, IngredientSearchResult } from "./types";
@@ -9,19 +10,17 @@ type SpoonacularIngredientSearch = {
   totalResults?: number;
 };
 
-const BASE_URL = "https://api.spoonacular.com/food/ingredients/search";
-
 export async function searchIngredients({
   query,
   limit = 12,
   intolerances = [],
-  apiKey,
+  client,
 }: {
   query: string;
   limit?: number;
   intolerances?: string[];
-  apiKey: string;
-}): Promise<{ url: string; cacheKey: string }> {
+  client: SpoonacularClient;
+}): Promise<{ url: string; cacheKey: string; headers: Record<string, string> }> {
   const params = new URLSearchParams();
   params.set("query", query);
   params.set("number", String(clamp(limit, 1, 25)));
@@ -31,11 +30,11 @@ export async function searchIngredients({
     params.set("intolerances", intolerances.join(","));
   }
 
-  const url = `${BASE_URL}?${params.toString()}&apiKey=${apiKey}`;
+  const url = buildSpoonacularUrl(client, "/food/ingredients/search", params);
   const rawCacheKey = JSON.stringify({ query, limit, intolerances });
   const cacheKey = `ingredients:${hashKey(rawCacheKey)}`;
 
-  return { url, cacheKey };
+  return { url, cacheKey, headers: client.headers };
 }
 
 export function normalizeIngredientSearch(

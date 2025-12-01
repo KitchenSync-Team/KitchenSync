@@ -1,6 +1,5 @@
+import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-const BASE_PRODUCT_URL = "https://api.spoonacular.com/food/products";
 
 type ProductDetail = {
   id: number;
@@ -17,8 +16,7 @@ type ProductDetail = {
 };
 
 export async function fetchAndCacheGroceryProduct({ productId }: { productId: number }) {
-  const apiKey = process.env.SPOONACULAR_API_KEY;
-  if (!apiKey) throw new Error("Spoonacular API key missing");
+  const client = getSpoonacularClient();
 
   const admin = createServiceRoleClient();
 
@@ -36,8 +34,8 @@ export async function fetchAndCacheGroceryProduct({ productId }: { productId: nu
     return toResponse(existing);
   }
 
-  const url = `${BASE_PRODUCT_URL}/${productId}?apiKey=${apiKey}`;
-  const apiRes = await fetch(url);
+  const url = buildSpoonacularUrl(client, `/food/products/${productId}`);
+  const apiRes = await fetch(url, { headers: client.headers });
   const raw = (await apiRes.json()) as ProductDetail;
   if (!apiRes.ok) {
     throw new Error(`Spoonacular product error: ${apiRes.status}`);
@@ -65,8 +63,7 @@ export async function fetchAndCacheGroceryProduct({ productId }: { productId: nu
 }
 
 export async function fetchAndCacheGroceryProductByUpc({ upc }: { upc: string }) {
-  const apiKey = process.env.SPOONACULAR_API_KEY;
-  if (!apiKey) throw new Error("Spoonacular API key missing");
+  const client = getSpoonacularClient();
 
   const admin = createServiceRoleClient();
 
@@ -82,8 +79,8 @@ export async function fetchAndCacheGroceryProductByUpc({ upc }: { upc: string })
 
   if (existing) return toResponse(existing);
 
-  const url = `${BASE_PRODUCT_URL}/upc/${encodeURIComponent(upc)}?apiKey=${apiKey}`;
-  const apiRes = await fetch(url);
+  const url = buildSpoonacularUrl(client, `/food/products/upc/${encodeURIComponent(upc)}`);
+  const apiRes = await fetch(url, { headers: client.headers });
   const raw = (await apiRes.json()) as ProductDetail;
   if (!apiRes.ok) {
     throw new Error(`Spoonacular product UPC error: ${apiRes.status}`);
