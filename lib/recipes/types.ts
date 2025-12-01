@@ -1,3 +1,5 @@
+import type { StandardizedRecipeDetails } from "./standardized";
+
 export type NormalizedIngredient = {
   name: string;
   original: string;
@@ -18,6 +20,7 @@ export type NormalizedRecipe = {
   missedIngredientCount?: number;
   usedIngredients?: NormalizedIngredient[];
   missedIngredients?: NormalizedIngredient[];
+  standardized?: StandardizedRecipeDetails | null;
 };
 
 export type AppliedPreferences = {
