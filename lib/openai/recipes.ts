@@ -291,11 +291,10 @@ function normalizeInstructionText(raw: unknown): StandardizedRecipeDetails["step
     .split(/(?<=[.?!])\s+/)
     .map((part) => part.trim())
     .filter(Boolean);
-  const steps = (parts.length > 0 ? parts : [cleaned]).map((instruction, idx) => ({
+  return (parts.length > 0 ? parts : [cleaned]).map((instruction, idx) => ({
     number: idx + 1,
     instruction,
   }));
-  return steps;
 }
 
 function normalizeAnalyzedInstructions(raw: unknown): StandardizedRecipeDetails["steps"] | null {
