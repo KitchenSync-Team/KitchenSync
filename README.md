@@ -61,9 +61,8 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (match anon key)
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
    - `S3_AVATARS_*` variables if you plan to test avatar uploads locally
-   - `OPENAI_API_KEY` (required for LLM-powered recipe details)
-   - `OPENAI_RECIPE_MODEL` (preferred model, defaults to `gpt-5.1`)
-   - `OPENAI_RECIPE_FALLBACK_MODEL` (optional fallback, defaults to `gpt-4.1-mini`)
+   - `SPOONACULAR_RAPIDAPI_KEY` (preferred) or `SPOONACULAR_API_KEY` (legacy direct key)
+   - Optional: `SPOONACULAR_RAPIDAPI_HOST` (defaults to `spoonacular-recipe-food-nutrition-v1.p.rapidapi.com`)
    The middleware also accepts `SUPABASE_URL` / `SUPABASE_ANON_KEY` as fallbacks.
 
 4. **Run & lint**
@@ -84,7 +83,7 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 | `npm run dev`   | Start Next.js dev server (Turbopack) |
 | `npm run build` | Production build / type check        |
 | `npm run lint`  | ESLint (Next.js config)              |
-| `node scripts/fetch-recipe-info.cjs <id-or-url>` | Fetch a single Spoonacular recipe (reads `SPOONACULAR_API_KEY` from env or .env.local) |
+| `node scripts/fetch-recipe-info.cjs <id-or-url>` | Fetch a single Spoonacular recipe (prefers `SPOONACULAR_RAPIDAPI_KEY`, falls back to `SPOONACULAR_API_KEY` from env or .env.local) |
 
 ## Testing Avatars Locally
 

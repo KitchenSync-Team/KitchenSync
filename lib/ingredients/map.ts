@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 
+import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-const MAP_URL = "https://api.spoonacular.com/food/ingredients/map";
 
 type MapRequestPayload = {
   ingredients: string[];
@@ -10,8 +9,7 @@ type MapRequestPayload = {
 };
 
 export async function mapIngredientsToProducts({ ingredients, servings }: MapRequestPayload) {
-  const apiKey = process.env.SPOONACULAR_API_KEY;
-  if (!apiKey) throw new Error("Spoonacular API key missing");
+  const client = getSpoonacularClient();
 
   const cacheKey = buildCacheKey(ingredients, servings);
 
@@ -31,9 +29,10 @@ export async function mapIngredientsToProducts({ ingredients, servings }: MapReq
     return { results: cached.results, cached: true };
   }
 
-  const res = await fetch(MAP_URL + `?apiKey=${apiKey}`, {
+  const url = buildSpoonacularUrl(client, "/food/ingredients/map");
+  const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...client.headers, "Content-Type": "application/json" },
     body: JSON.stringify({
       ingredients,
       servings,

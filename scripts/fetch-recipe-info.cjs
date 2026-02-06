@@ -4,20 +4,21 @@
  * Fetch a single recipe by ID or Spoonacular URL and print key details as text.
  *
  * Usage:
- *   SPOONACULAR_API_KEY=... node scripts/fetch-recipe-info.cjs 716429
+ *   SPOONACULAR_RAPIDAPI_KEY=... node scripts/fetch-recipe-info.cjs 716429
  *   SPOONACULAR_API_KEY=... node scripts/fetch-recipe-info.cjs "https://spoonacular.com/recipes/pasta-with-garlic-716429"
  *
- * Reads SPOONACULAR_API_KEY from env or .env.local.
+ * Reads SPOONACULAR_RAPIDAPI_KEY (Rapid API) or SPOONACULAR_API_KEY (direct) from env or .env.local.
  */
 
 const fs = require("node:fs");
 const path = require("node:path");
 
-const API_KEY =
-  process.env.SPOONACULAR_API_KEY || loadDotenvKey("SPOONACULAR_API_KEY", [process.cwd()]);
+const client = getSpoonacularClient();
 
-if (!API_KEY) {
-  console.error("Missing SPOONACULAR_API_KEY in env (.env.local or process env).");
+if (!client) {
+  console.error(
+    "Missing Spoonacular credentials. Set SPOONACULAR_RAPIDAPI_KEY or SPOONACULAR_API_KEY in env or .env.local.",
+  );
   process.exit(1);
 }
 
@@ -50,8 +51,10 @@ function parseRecipeId(value) {
 }
 
 async function run() {
-  const url = `https://api.spoonacular.com/recipes/${recipeId}/information?includeNutrition=true&apiKey=${API_KEY}`;
-  const res = await fetch(url);
+  const params = new URLSearchParams();
+  params.set("includeNutrition", "true");
+  const url = buildSpoonacularUrl(client, `/recipes/${recipeId}/information`, params);
+  const res = await fetch(url, { headers: client.headers });
   const data = await res.json();
 
   if (!res.ok) {
@@ -113,6 +116,48 @@ function printRecipe(recipe) {
 function stripHtml(value) {
   if (typeof value !== "string") return "";
   return value.replace(/<[^>]*>/g, "");
+}
+
+function getSpoonacularClient() {
+  const rapidApiKey =
+    process.env.SPOONACULAR_RAPIDAPI_KEY ||
+    process.env.RAPIDAPI_SPOONACULAR_KEY ||
+    process.env.RAPIDAPI_KEY ||
+    loadDotenvKey("SPOONACULAR_RAPIDAPI_KEY", [process.cwd()]);
+
+  const rapidApiHost =
+    process.env.SPOONACULAR_RAPIDAPI_HOST || "spoonacular-recipe-food-nutrition-v1.p.rapidapi.com";
+
+  if (rapidApiKey) {
+    return {
+      baseUrl: `https://${rapidApiHost}`,
+      headers: {
+        "X-RapidAPI-Key": rapidApiKey,
+        "X-RapidAPI-Host": rapidApiHost,
+      },
+      authType: "rapidapi",
+    };
+  }
+
+  const apiKey =
+    process.env.SPOONACULAR_API_KEY || loadDotenvKey("SPOONACULAR_API_KEY", [process.cwd()]);
+  if (!apiKey) return null;
+
+  return {
+    baseUrl: "https://api.spoonacular.com",
+    headers: {},
+    authType: "direct",
+    apiKey,
+  };
+}
+
+function buildSpoonacularUrl(client, path, params) {
+  const searchParams = params || new URLSearchParams();
+  if (client.authType === "direct" && client.apiKey) {
+    searchParams.set("apiKey", client.apiKey);
+  }
+  const query = searchParams.toString();
+  return query ? `${client.baseUrl}${path}?${query}` : `${client.baseUrl}${path}`;
 }
 
 function loadDotenvKey(key, roots) {

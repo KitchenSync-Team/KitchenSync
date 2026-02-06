@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 
+import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
+
 import type { RecipeSearchPayload, RecipeSearchResponse, NormalizedRecipe } from "./types";
 import { loadUserRecipeContext } from "./preferences";
-
-const BASE_URL = "https://api.spoonacular.com/recipes";
 
 type SpoonacularComplexResponse = {
   results?: (Record<string, unknown> & { id: number; title: string; image?: string })[];
@@ -26,16 +26,17 @@ type BuildParamsResult = {
   url: string;
   cacheKey: string;
   applied: RecipeSearchResponse["appliedPreferences"];
+  headers: Record<string, string>;
 };
 
 export async function buildRecipeSearch({
   payload,
   userId,
-  apiKey,
+  client,
 }: {
   payload: RecipeSearchPayload;
   userId: string;
-  apiKey: string;
+  client: SpoonacularClient;
 }): Promise<BuildParamsResult> {
   const userContext = await loadUserRecipeContext(userId);
 
@@ -135,13 +136,14 @@ export async function buildRecipeSearch({
 
   const url =
     endpoint === "findByIngredients"
-      ? `${BASE_URL}/findByIngredients?${params.toString()}&apiKey=${apiKey}`
-      : `${BASE_URL}/complexSearch?${params.toString()}&apiKey=${apiKey}`;
+      ? buildSpoonacularUrl(client, "/recipes/findByIngredients", params)
+      : buildSpoonacularUrl(client, "/recipes/complexSearch", params);
 
   return {
     endpoint,
     url,
     cacheKey,
+    headers: client.headers,
     applied: {
       diet,
       allergens,

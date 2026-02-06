@@ -11,13 +11,16 @@ import {
 import type { IngredientSearchResponse } from "@/lib/ingredients/types";
 import { loadUserRecipeContext } from "@/lib/recipes/preferences";
 import { createClient } from "@/lib/supabase/server";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function POST(req: NextRequest) {
   try {
-    if (!API_KEY) {
-      return NextResponse.json({ error: "Spoonacular API key missing" }, { status: 500 });
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
+      return NextResponse.json({ error: "Spoonacular API key missing", detail }, { status: 500 });
     }
 
     const supabase = await createClient();
@@ -43,9 +46,9 @@ export async function POST(req: NextRequest) {
       ? body.intolerances.filter((value): value is string => typeof value === "string")
       : userContext.allergens;
 
-    const { url, cacheKey } = await searchIngredients({
+    const { url, cacheKey, headers } = await searchIngredients({
       query,
-      apiKey: API_KEY,
+      client,
       limit: number,
       intolerances,
     });
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cachedPayload);
     }
 
-    const apiRes = await fetch(url);
+    const apiRes = await fetch(url, { headers });
     const raw = await apiRes.json();
 
     if (!apiRes.ok) {

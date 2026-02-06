@@ -9,8 +9,7 @@ import {
   writeIngredientInfoCache,
 } from "@/lib/ingredients/details";
 import { createClient } from "@/lib/supabase/server";
-
-const API_KEY = process.env.SPOONACULAR_API_KEY;
+import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
 export async function GET(
   _req: NextRequest,
@@ -19,8 +18,12 @@ export async function GET(
   try {
     const { id: idParam } = await context.params;
 
-    if (!API_KEY) {
-      return NextResponse.json({ error: "Spoonacular API key missing" }, { status: 500 });
+    let client;
+    try {
+      client = getSpoonacularClient();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Spoonacular API key missing";
+      return NextResponse.json({ error: "Spoonacular API key missing", detail }, { status: 500 });
     }
 
     const supabase = await createClient();
@@ -37,7 +40,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid ingredient id" }, { status: 400 });
     }
 
-    const { url, cacheKey } = buildIngredientInfoUrl(id, API_KEY);
+    const { url, cacheKey, headers } = buildIngredientInfoUrl(id, client);
 
     const { data: cacheHit, error: cacheError } = await readIngredientInfoCache(cacheKey);
     if (cacheError) {
@@ -50,7 +53,7 @@ export async function GET(
       }
     }
 
-    const apiRes = await fetch(url);
+    const apiRes = await fetch(url, { headers });
     const raw = await apiRes.json();
     if (!apiRes.ok) {
       return NextResponse.json({ error: "Spoonacular error", detail: raw }, { status: apiRes.status });
