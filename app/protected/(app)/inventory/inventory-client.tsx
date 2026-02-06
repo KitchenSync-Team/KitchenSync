@@ -389,7 +389,7 @@ export function InventoryClient({
     if (!manageTarget) return;
     const qty = Number.parseInt(manageQuantity, 10);
     if (!Number.isFinite(qty) || qty <= 0 || qty > 999) {
-      setManageError("Enter a valid quantity.");
+      setManageError("Enter a valid quantity (max 999).");
       return;
     }
     setManageSaving(true);
