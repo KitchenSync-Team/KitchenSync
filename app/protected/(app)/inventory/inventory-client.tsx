@@ -133,6 +133,8 @@ export function InventoryClient({
     [allLocationIds],
   );
 
+  const displayUnits = useMemo(() => filterImperialUnits(units), [units]);
+
   const resolveUnitIdByLabel = useCallback(
     (label: string | null) => {
       if (!label) return null;
@@ -148,8 +150,6 @@ export function InventoryClient({
     },
     [displayUnits],
   );
-
-  const displayUnits = useMemo(() => filterImperialUnits(units), [units]);
   const addUnitOptions = useMemo(
     () => filterUnitsByPossible(displayUnits, addSuggestedUnits),
     [displayUnits, addSuggestedUnits],
