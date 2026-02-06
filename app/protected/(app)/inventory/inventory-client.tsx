@@ -886,8 +886,8 @@ export function InventoryClient({
               </div>
             )}
           </div>
-        {(addStep === "details" || (addStep === "search" && addSelection)) && (
-          <DialogFooter className="mt-auto bg-background pt-3 pb-2">
+          {(addStep === "details" || (addStep === "search" && addSelection)) && (
+          <DialogFooter className="mt-auto -mt-2 bg-background pt-2 pb-1">
             {addStep === "details" ? (
               <>
                 <Button
