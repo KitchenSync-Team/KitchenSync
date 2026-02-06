@@ -50,7 +50,7 @@ import {
   type CustomPlannerLocation,
   type DefaultLocationOption,
 } from "@/app/protected/_lib/location-presets";
-import type { KitchenInviteSummary, KitchenMember, LocationSummary } from "@/lib/domain/kitchen";
+import type { KitchenInviteSummary, KitchenMember, LocationSummary as KitchenLocationSummary } from "@/lib/domain/kitchen";
 import { renameKitchen, updateKitchenSettings } from "./actions";
 import type { KitchenSettingsActionState } from "./action-state";
 import { defaultKitchenSettingsState } from "./action-state";
@@ -62,7 +62,7 @@ type KitchenSettingsFormProps = {
   memberCount: number | null;
   defaultOptions: DefaultLocationOption[];
   initialCustomLocations: CustomPlannerLocation[];
-  locations: LocationSummary[];
+  locations: KitchenLocationSummary[];
   members: KitchenMember[];
   pendingInvites: KitchenInviteSummary[];
   currentUserId: string;
@@ -407,7 +407,7 @@ function StorageLocationsCard({
   kitchenId: string;
   defaultOptions: DefaultLocationOption[];
   initialCustomLocations: CustomPlannerLocation[];
-  locations: LocationSummary[];
+  locations: KitchenLocationSummary[];
 }) {
   const [state, formAction] = useActionState<KitchenSettingsActionState, FormData>(
     updateKitchenSettings,
@@ -644,7 +644,7 @@ function StorageLocationsCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove locations?</AlertDialogTitle>
             <AlertDialogDescription>
-              Removing a location will permanently delete all inventory stored there. This can't be undone.
+              Removing a location will permanently delete all inventory stored there. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {removedLocations.length > 0 ? (

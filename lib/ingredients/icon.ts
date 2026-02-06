@@ -19,7 +19,6 @@ import {
   Flame,
   Grape,
   IceCream,
-  Leaf,
   LeafyGreen,
   Milk,
   Nut,

@@ -5,6 +5,7 @@ import { addDays, addMonths, format, isValid, parseISO } from "date-fns";
 import {
   Calendar as CalendarIcon,
   ChevronDown,
+  ChevronUp,
   Loader2,
   Plus,
   Search,
@@ -151,11 +152,6 @@ export function InventoryClient({
     const parsed = parseISO(manageExpiresAt);
     return isValid(parsed) ? parsed : undefined;
   }, [manageExpiresAt]);
-  const addSelectedDate = useMemo(() => {
-    if (!addExpiresAt) return undefined;
-    const parsed = parseISO(addExpiresAt);
-    return isValid(parsed) ? parsed : undefined;
-  }, [addExpiresAt]);
   const consumeSelectedEntry = useMemo(() => {
     if (!consumeStack) return null;
     return consumeStack.entries.find((item) => item.id === consumeEntryId) ?? consumeStack.entries[0] ?? null;
@@ -167,13 +163,19 @@ export function InventoryClient({
     }
   }, [manageSelectedDate]);
   useEffect(() => {
-    if (addSelectedDate) {
-      setAddCalendarMonth(new Date(addSelectedDate.getFullYear(), addSelectedDate.getMonth(), 1));
+    if (!addExpiresAt) {
+      setAddCalendarMonth(undefined);
+      setAddExpiresAtInput("");
+      return;
     }
-    if (addSelectedDate && !addExpiresAtInput) {
-      setAddExpiresAtInput(format(addSelectedDate, "MM/dd/yyyy"));
-    }
-  }, [addSelectedDate]);
+    const parsed = parseISO(addExpiresAt);
+    if (!isValid(parsed)) return;
+    const monthStart = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+    setAddCalendarMonth((current) =>
+      current && current.getTime() === monthStart.getTime() ? current : monthStart,
+    );
+    setAddExpiresAtInput(format(parsed, "MM/dd/yyyy"));
+  }, [addExpiresAt]);
   useEffect(() => {
     if (!consumeSelectedEntry) return;
     const parsed = Number.parseInt(consumeAmount, 10);

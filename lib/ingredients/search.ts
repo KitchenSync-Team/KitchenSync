@@ -84,18 +84,21 @@ export function normalizeCachedIngredients(
   }
   const payload = cached as Partial<IngredientSearchResponse>;
   const rows = Array.isArray(payload.results) ? payload.results : [];
-  const results: IngredientSearchResult[] = rows
+  const results = rows
     .map((row) => {
       const entry = row as Partial<IngredientSearchResult>;
       if (typeof entry.id !== "number" || !entry.name) return null;
-      return {
+      const result: IngredientSearchResult = {
         id: entry.id,
         name: entry.name,
         image: normalizeImage(entry.image),
-        aisle: entry.aisle ?? null,
       };
+      if (entry.aisle !== undefined) {
+        result.aisle = entry.aisle ?? null;
+      }
+      return result;
     })
-    .filter((row): row is IngredientSearchResult => Boolean(row));
+    .filter((row): row is IngredientSearchResult => row !== null);
   return {
     results,
     totalResults: typeof payload.totalResults === "number" ? payload.totalResults : 0,
