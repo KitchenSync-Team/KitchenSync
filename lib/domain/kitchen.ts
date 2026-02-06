@@ -371,11 +371,7 @@ export async function loadKitchenData(
       ? preferences.personalization_opt_in
       : PERSONALIZATION_FALLBACK;
 
-  const allowedUnits = new Set(["imperial", "metric"]);
-  const unitsSystem =
-    typeof preferences?.units_system === "string" && allowedUnits.has(preferences.units_system)
-      ? (preferences.units_system as "imperial" | "metric")
-      : "imperial";
+  const unitsSystem: "imperial" = "imperial";
 
   const locale =
     typeof preferences?.locale === "string" && preferences.locale.trim().length > 0

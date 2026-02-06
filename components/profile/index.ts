@@ -1,5 +1,4 @@
 export { ProfileCard } from "./profile-card"
 export { CuisinePreferencesCard } from "./cuisine-preferences-card"
 export { DietaryPreferencesCard } from "./dietary-preferences-card"
-export { MeasurementUnitsCard } from "./measurement-units-card"
 export { AvatarUploader } from "./avatar-uploader"

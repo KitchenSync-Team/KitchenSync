@@ -83,7 +83,7 @@ export async function saveIdentityClient(payload: {
     if (error) {
       return {
         success: false,
-        error: error.message ?? "We couldn’t update your profile. Please try again.",
+        error: error.message ?? "We couldn't update your profile. Please try again.",
       }
     }
 
@@ -91,7 +91,7 @@ export async function saveIdentityClient(payload: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your profile.",
+      error: error instanceof Error ? error.message : "We couldn't update your profile.",
     }
   }
 }
@@ -114,7 +114,7 @@ export async function updateEmailClient(payload: { email: string }): Promise<Pro
     if (authError) {
       return {
         success: false,
-        error: authError.message ?? "We couldn’t update your email. Please try again.",
+        error: authError.message ?? "We couldn't update your email. Please try again.",
       }
     }
 
@@ -126,7 +126,7 @@ export async function updateEmailClient(payload: { email: string }): Promise<Pro
     if (profileError) {
       return {
         success: false,
-        error: profileError.message ?? "We couldn’t sync your profile email.",
+        error: profileError.message ?? "We couldn't sync your profile email.",
       }
     }
 
@@ -134,7 +134,7 @@ export async function updateEmailClient(payload: { email: string }): Promise<Pro
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your email.",
+      error: error instanceof Error ? error.message : "We couldn't update your email.",
     }
   }
 }
@@ -149,14 +149,14 @@ export async function updatePasswordClient(payload: { password: string }): Promi
     const { supabase } = await requireUser()
     const { error } = await supabase.auth.updateUser({ password })
     if (error) {
-      return { success: false, error: error.message ?? "We couldn’t update your password." }
+      return { success: false, error: error.message ?? "We couldn't update your password." }
     }
 
     return { success: true }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your password.",
+      error: error instanceof Error ? error.message : "We couldn't update your password.",
     }
   }
 }
@@ -182,7 +182,7 @@ export async function updateCommunicationPreferencesClient(payload: {
     if (error) {
       return {
         success: false,
-        error: error.message ?? "We couldn’t update your communication settings.",
+        error: error.message ?? "We couldn't update your communication settings.",
       }
     }
 
@@ -190,7 +190,7 @@ export async function updateCommunicationPreferencesClient(payload: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your communication settings.",
+      error: error instanceof Error ? error.message : "We couldn't update your communication settings.",
     }
   }
 }
@@ -218,7 +218,7 @@ export async function updateDietaryProfileClient(payload: {
     if (error) {
       return {
         success: false,
-        error: error.message ?? "We couldn’t update your dietary preferences.",
+        error: error.message ?? "We couldn't update your dietary preferences.",
       }
     }
 
@@ -226,7 +226,7 @@ export async function updateDietaryProfileClient(payload: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your dietary preferences.",
+      error: error instanceof Error ? error.message : "We couldn't update your dietary preferences.",
     }
   }
 }
@@ -257,7 +257,7 @@ export async function updateCuisinePreferencesClient(payload: {
     if (error) {
       return {
         success: false,
-        error: error.message ?? "We couldn’t update your cuisine preferences.",
+        error: error.message ?? "We couldn't update your cuisine preferences.",
       }
     }
 
@@ -265,40 +265,7 @@ export async function updateCuisinePreferencesClient(payload: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your cuisine preferences.",
-    }
-  }
-}
-
-export async function updateUnitsSystemClient(payload: {
-  units: "imperial" | "metric"
-}): Promise<ProfileMutationResult> {
-  try {
-    const unitsSystem = payload.units === "metric" ? "metric" : "imperial"
-    const { supabase, user } = await requireUser()
-
-    const { error } = await supabase
-      .from("user_preferences")
-      .upsert(
-        {
-          user_id: user.id,
-          units_system: unitsSystem,
-        },
-        { onConflict: "user_id" },
-      )
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message ?? "We couldn’t update your measurement units.",
-      }
-    }
-
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "We couldn’t update your measurement units.",
+      error: error instanceof Error ? error.message : "We couldn't update your cuisine preferences.",
     }
   }
 }

@@ -126,9 +126,7 @@ export async function completeOnboarding(
           ? personalizeRaw === "true"
           : Boolean(personalizeRaw);
 
-    const unitsSystemRaw = formData.get("unitsSystem");
-    const unitsSystem =
-      typeof unitsSystemRaw === "string" && unitsSystemRaw === "metric" ? "metric" : "imperial";
+    const unitsSystem = "imperial";
 
     const localeRaw = formData.get("locale");
     const locale =

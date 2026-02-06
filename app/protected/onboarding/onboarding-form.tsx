@@ -55,11 +55,6 @@ const LOCATION_REQUIRED_ERROR: OnboardingErrorMessage = {
   description: LOCATION_REQUIRED_ERROR_MESSAGE,
 };
 
-const UNIT_SYSTEM_OPTIONS = [
-  { value: "imperial", label: "Imperial (°F, lbs, gallons)" },
-  { value: "metric", label: "Metric (°C, kg, liters)" },
-];
-
 const THEME_OPTIONS: Array<{ value: "system" | "light" | "dark"; label: string }> = [
   { value: "system", label: "Match system" },
   { value: "light", label: "Light" },
@@ -271,9 +266,7 @@ export function OnboardingForm({
   const [personalizationOptIn, setPersonalizationOptIn] = useState(
     initialPreferences.personalizationOptIn ?? PERSONALIZATION_DEFAULT,
   );
-  const [unitsSystem, setUnitsSystem] = useState<"imperial" | "metric">(
-    initialPreferences.unitsSystem === "metric" ? "metric" : "imperial",
-  );
+  const unitsSystem: "imperial" = "imperial";
   const [emailOptIn, setEmailOptIn] = useState(initialPreferences.emailOptIn ?? true);
   const { theme: currentTheme = "system", setTheme } = useTheme();
   const initialLocale = initialPreferences.locale ?? "en-US";
@@ -714,31 +707,7 @@ export function OnboardingForm({
               <p className="text-xs text-muted-foreground">
                 Instantly switch between light, dark, or match your device setting. You can update this anytime in settings.
               </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unitsSystem">Measurement units</Label>
-              <Select
-                value={unitsSystem}
-                onValueChange={(value) => setUnitsSystem(value as "imperial" | "metric")}
-              >
-                <SelectTrigger
-                  id="unitsSystem"
-                  className="focus-visible:border-emerald-500 focus-visible:ring-emerald-500/40"
-                >
-                  <SelectValue placeholder="Choose units" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIT_SYSTEM_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-border bg-background/70 p-4">
+            </div>            <div className="space-y-3 rounded-lg border border-border bg-background/70 p-4">
               <div className="flex items-center justify-between">
                 <div className="max-w-[75%] space-y-1">
                   <p className="text-sm font-medium">Email updates</p>
@@ -1035,3 +1004,4 @@ export function OnboardingForm({
     </form>
   );
 }
+

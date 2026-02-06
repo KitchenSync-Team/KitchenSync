@@ -2,7 +2,6 @@ import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen"
 import {
   CuisinePreferencesCard,
   DietaryPreferencesCard,
-  MeasurementUnitsCard,
   ProfileCard,
 } from "@/components/profile"
 import {
@@ -58,7 +57,7 @@ export default async function ProfilePage() {
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">User preferences</h2>
           <p className="text-sm text-muted-foreground">
-            Set dietary boundaries, favorite cuisines, and measurement units for tailored experiences.
+            Set dietary boundaries and favorite cuisines for tailored experiences.
           </p>
         </div>
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -69,7 +68,6 @@ export default async function ProfilePage() {
               dietaryOptions={dietaryOptionMap}
               allergenOptions={allergenOptionMap}
             />
-            <MeasurementUnitsCard unitsSystem={preferences.unitsSystem as "imperial" | "metric"} />
           </div>
           <CuisinePreferencesCard
             likes={preferences.cuisineLikes}
