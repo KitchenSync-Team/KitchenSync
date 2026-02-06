@@ -32,7 +32,7 @@ export async function requireKitchenMembership(
 ): Promise<MembershipGuardResult> {
   const authResult = await requireAuthenticatedUser();
   if ("error" in authResult) {
-    return { error: authResult.error };
+    return { error: authResult.error ?? "Unauthorized" };
   }
 
   return requireKitchenMembershipForUser(authResult.user, kitchenId);

@@ -266,7 +266,7 @@ export function OnboardingForm({
   const [personalizationOptIn, setPersonalizationOptIn] = useState(
     initialPreferences.personalizationOptIn ?? PERSONALIZATION_DEFAULT,
   );
-  const unitsSystem: "imperial" = "imperial";
+  const unitsSystem = "imperial" as const;
   const [emailOptIn, setEmailOptIn] = useState(initialPreferences.emailOptIn ?? true);
   const { theme: currentTheme = "system", setTheme } = useTheme();
   const initialLocale = initialPreferences.locale ?? "en-US";

@@ -4,7 +4,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "audit:recipe": "node scripts/fetch-recipe-info.cjs"
   },
   "dependencies": {
@@ -52,14 +52,14 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4.1.16",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "baseline-browser-mapping": "^2.9.19",
-    "eslint": "^9",
-    "eslint-config-next": "^16.0.10",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.5.12",
     "postcss": "^8",
     "shadcn": "^3.8.3",
     "tailwindcss": "^4.1.16",

@@ -9,11 +9,15 @@ declare global {
   var __kitchenSyncCacheStore: CacheStore | undefined;
 }
 
-const store: CacheStore =
-  globalThis.__kitchenSyncCacheStore ?? new Map<string, CacheEntry<unknown>>();
+const globalForCache = globalThis as typeof globalThis & {
+  __kitchenSyncCacheStore?: CacheStore;
+};
 
-if (!globalThis.__kitchenSyncCacheStore) {
-  globalThis.__kitchenSyncCacheStore = store;
+const store: CacheStore =
+  globalForCache.__kitchenSyncCacheStore ?? new Map<string, CacheEntry<unknown>>();
+
+if (!globalForCache.__kitchenSyncCacheStore) {
+  globalForCache.__kitchenSyncCacheStore = store;
 }
 
 export function getCacheValue<T>(key: string): T | null {

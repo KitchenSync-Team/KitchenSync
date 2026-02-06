@@ -371,7 +371,7 @@ export async function loadKitchenData(
       ? preferences.personalization_opt_in
       : PERSONALIZATION_FALLBACK;
 
-  const unitsSystem: "imperial" = "imperial";
+  const unitsSystem = "imperial" as const;
 
   const locale =
     typeof preferences?.locale === "string" && preferences.locale.trim().length > 0
