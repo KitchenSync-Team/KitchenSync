@@ -4,7 +4,6 @@ import { SupabaseSessionProvider } from "@/components/auth/supabase-session-prov
 import { SupabaseSessionListener } from "@/components/auth/supabase-session-listener";
 import { ActiveThemeProvider } from "@/components/theme/active-theme";
 import { Toaster } from "@/components/ui/sonner";
-import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -36,10 +35,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const session = null;
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -54,7 +50,7 @@ export default async function RootLayout({
             <ActiveThemeProvider>{children}</ActiveThemeProvider>
             <Toaster richColors position="top-center" />
           </ThemeProvider>
-          <SupabaseSessionListener accessToken={session?.access_token ?? undefined} />
+          <SupabaseSessionListener />
         </SupabaseSessionProvider>
       </body>
     </html>

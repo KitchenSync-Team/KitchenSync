@@ -1,13 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
-
-// Protect only these routes
-const PROTECTED_PATHS = [
-  "/dashboard",
-  "/recipes",
-  "/inventory",
-  "/profile",
-];
+import { hasEnvVars } from "./lib/supabase/utils";
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
@@ -15,11 +8,18 @@ export const config = {
 
 // THE NEW REQUIRED EXPORT NAME:
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next();
+  let response = NextResponse.next({ request });
+
+  // Skip if env isn't configured (local dev or preview setups).
+  if (!hasEnvVars) {
+    return response;
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY).");
@@ -28,21 +28,22 @@ export async function proxy(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get: (name: string) => request.cookies.get(name)?.value,
-      set: (
-        name: string,
-        value: string,
-        options?: Parameters<typeof response.cookies.set>[2]
-      ) => {
-        response.cookies.set(name, value, options);
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options),
+        );
       },
     },
   });
 
-  // Refresh session
-  const { data } = await supabase.auth.getSession();
-  const session = data.session;
-
+  // Refresh session (required for SSR auth consistency)
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims;
   const pathname = request.nextUrl.pathname;
 
   // Public routes
@@ -53,12 +54,8 @@ export async function proxy(request: NextRequest) {
 
   if (isPublic) return response;
 
-  // Protected routes
-  const routeIsProtected = PROTECTED_PATHS.some((path) =>
-    pathname.startsWith(path)
-  );
-
-  if (routeIsProtected && !session) {
+  // Protected app routes live under /protected
+  if (pathname.startsWith("/protected") && !user) {
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("redirectedFrom", pathname);
     return NextResponse.redirect(loginUrl);
