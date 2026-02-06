@@ -739,15 +739,7 @@ export function InventoryClient({
                 : "Add item"}
             </DialogTitle>
           </DialogHeader>
-        <div
-          className="app-scrollbar flex-1 overflow-y-auto space-y-4 pr-1"
-          onScroll={(event) => {
-            if (addStep !== "search") return;
-            const target = event.currentTarget;
-            const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 120;
-            if (nearBottom) void loadMoreResults();
-          }}
-        >
+        <div className="flex-1 space-y-4">
             {addStep === "search" && (
               <>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -777,45 +769,54 @@ export function InventoryClient({
                 </div>
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                  {addResults.map((result) => {
-                    const PlaceholderIcon = getIngredientFallbackIcon({
-                      name: result.name,
-                      aisle: result.aisle,
-                    });
-                    const hasImage = Boolean(result.image && !result.image.endsWith("/no.jpg"));
-                    return (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onClick={() => {
-                        setAddSelection(result);
-                        void loadIngredientDetails(result);
-                      }}
-                      className={cn(
-                        "group flex flex-col rounded-lg border p-2 text-left transition hover:border-primary",
-                        addSelection?.id === result.id && "border-primary bg-muted/50",
-                      )}
-                    >
-                      <div className="flex h-28 items-center justify-center rounded-md bg-muted">
-                        {hasImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={result.image ?? ""}
-                            alt={formatInventoryItemName(result.name)}
-                            className="h-28 w-full rounded-md object-contain p-2"
-                          />
-                        ) : (
-                          <PlaceholderIcon className="h-6 w-6 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="mt-3 space-y-1">
-                        <p className="line-clamp-2 font-medium">{formatInventoryItemName(result.name)}</p>
-                        {result.aisle && <p className="text-xs text-muted-foreground">{result.aisle}</p>}
-                      </div>
-                    </button>
-                    );
-                  })}
+                <div
+                  className="app-scrollbar max-h-[50vh] overflow-y-auto pr-1 sm:max-h-[55vh]"
+                  onScroll={(event) => {
+                    const target = event.currentTarget;
+                    const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 120;
+                    if (nearBottom) void loadMoreResults();
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {addResults.map((result) => {
+                      const PlaceholderIcon = getIngredientFallbackIcon({
+                        name: result.name,
+                        aisle: result.aisle,
+                      });
+                      const hasImage = Boolean(result.image && !result.image.endsWith("/no.jpg"));
+                      return (
+                        <button
+                          key={result.id}
+                          type="button"
+                          onClick={() => {
+                            setAddSelection(result);
+                            void loadIngredientDetails(result);
+                          }}
+                          className={cn(
+                            "group flex flex-col rounded-lg border p-2 text-left transition hover:border-primary",
+                            addSelection?.id === result.id && "border-primary bg-muted/50",
+                          )}
+                        >
+                          <div className="flex h-28 items-center justify-center rounded-md bg-muted">
+                            {hasImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={result.image ?? ""}
+                                alt={formatInventoryItemName(result.name)}
+                                className="h-28 w-full rounded-md object-contain p-2"
+                              />
+                            ) : (
+                              <PlaceholderIcon className="h-6 w-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="mt-3 space-y-1">
+                            <p className="line-clamp-2 font-medium">{formatInventoryItemName(result.name)}</p>
+                            {result.aisle && <p className="text-xs text-muted-foreground">{result.aisle}</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 {addLoadingMore && (
                   <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
