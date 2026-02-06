@@ -45,11 +45,13 @@ export function NavMain({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {label ? <SidebarGroupLabel>{label}</SidebarGroupLabel> : null}
       <SidebarMenu>
         {items.map((item) => {
           const Icon = getSidebarIcon(item.icon)
-          const isActive = pathname === item.url || pathname.startsWith(`${item.url}/`)
+          const isActive =
+            pathname === item.url ||
+            (item.url !== "/protected" && pathname.startsWith(`${item.url}/`))
 
           return (
             <Collapsible key={item.title} asChild defaultOpen={isActive}>

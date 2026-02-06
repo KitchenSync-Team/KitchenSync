@@ -102,7 +102,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} label="Kitchen" />
+        <NavMain items={navMain} label="" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />
