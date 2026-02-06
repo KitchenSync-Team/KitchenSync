@@ -121,7 +121,7 @@ export function InventoryClient({
     [allLocationIds, openLocations],
   );
   const allCollapsed = useMemo(
-    () => allLocationIds.every((id) => (openLocations[id] ?? true) === false),
+    () => allLocationIds.every((id) => !(openLocations[id] ?? true)),
     [allLocationIds, openLocations],
   );
 
