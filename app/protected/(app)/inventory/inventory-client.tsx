@@ -36,6 +36,7 @@ type InventoryEntry = {
   aisle: string | null;
   quantity: number;
   unit: string | null;
+  unitId?: string | null;
   expiresAt: string | null;
   possibleUnits?: string[] | null;
 };
@@ -132,15 +133,39 @@ export function InventoryClient({
     [allLocationIds],
   );
 
+  const resolveUnitIdByLabel = useCallback(
+    (label: string | null) => {
+      if (!label) return null;
+      const normalized = label.trim().toLowerCase().replace(/^\d+(\.\d+)?\s*/, "");
+      if (!normalized) return null;
+      const match = displayUnits.find((unit) => {
+        const name = unit.name.toLowerCase();
+        const abbr = unit.abbreviation?.toLowerCase();
+        const plural = formatUnitLabel(2, unit.name)?.toLowerCase();
+        return normalized === name || normalized === abbr || (plural && normalized === plural);
+      });
+      return match?.id ?? null;
+    },
+    [displayUnits],
+  );
+
   const displayUnits = useMemo(() => filterImperialUnits(units), [units]);
   const addUnitOptions = useMemo(
     () => filterUnitsByPossible(displayUnits, addSuggestedUnits),
     [displayUnits, addSuggestedUnits],
   );
-  const manageUnitOptions = useMemo(
-    () => filterUnitsByPossible(displayUnits, manageTarget?.possibleUnits ?? null),
-    [displayUnits, manageTarget?.possibleUnits],
+  const resolvedManageUnitId = useMemo(
+    () => manageUnitId ?? resolveUnitIdByLabel(manageTarget?.unit ?? null),
+    [manageTarget?.unit, manageUnitId, resolveUnitIdByLabel],
   );
+
+  const manageUnitOptions = useMemo(() => {
+    const options = filterUnitsByPossible(displayUnits, manageTarget?.possibleUnits ?? null);
+    if (!resolvedManageUnitId) return options;
+    if (options.some((unit) => unit.id === resolvedManageUnitId)) return options;
+    const fallback = displayUnits.find((unit) => unit.id === resolvedManageUnitId);
+    return fallback ? [fallback, ...options] : options;
+  }, [displayUnits, manageTarget?.possibleUnits, resolvedManageUnitId]);
   const addQuantityValue = Number(addQuantity);
   const addUnitQuantity = Number.isFinite(addQuantityValue) && addQuantityValue > 0 ? addQuantityValue : 1;
   const manageQuantityValue = Number.parseInt(manageQuantity, 10);
@@ -186,6 +211,14 @@ export function InventoryClient({
       setConsumeError(null);
     }
   }, [consumeAmount, consumeSelectedEntry]);
+
+  useEffect(() => {
+    if (!manageTarget) return;
+    if (manageUnitId) return;
+    const resolved = resolveUnitIdByLabel(manageTarget.unit ?? null);
+    if (!resolved) return;
+    setManageUnitId(resolved);
+  }, [manageTarget, manageUnitId, resolveUnitIdByLabel]);
 
   const locationStacks = useMemo(() => {
     return buckets.map((location) => {
@@ -402,6 +435,7 @@ export function InventoryClient({
                     imageUrl: addSelection.image ?? null,
                     aisle: addSelection.aisle ?? null,
                     quantity: qty,
+                    unitId: addUnitId ?? null,
                     unit:
                       displayUnits.find((unit) => unit.id === addUnitId)?.abbreviation ??
                       displayUnits.find((unit) => unit.id === addUnitId)?.name ??
@@ -433,10 +467,7 @@ export function InventoryClient({
     if (!entry) return;
     setManageTarget(entry);
     setManageQuantity(String(entry.quantity ?? 1));
-    const unitId = displayUnits.find(
-      (unit) => unit.abbreviation === entry.unit || unit.name === entry.unit,
-    )?.id;
-    setManageUnitId(unitId ?? null);
+    setManageUnitId(entry.unitId ?? resolveUnitIdByLabel(entry.unit));
     setManageExpiresAt(entry.expiresAt ?? "");
     const initialExpiry = entry.expiresAt ? parseISO(entry.expiresAt) : null;
     setManageExpiresAtInput(initialExpiry && isValid(initialExpiry) ? format(initialExpiry, "MM/dd/yyyy") : "");
@@ -452,10 +483,7 @@ export function InventoryClient({
     setManageEntryId(entry.id);
     setManageTarget(entry);
     setManageQuantity(String(entry.quantity ?? 1));
-    const unitId = displayUnits.find(
-      (unit) => unit.abbreviation === entry.unit || unit.name === entry.unit,
-    )?.id;
-    setManageUnitId(unitId ?? null);
+    setManageUnitId(entry.unitId ?? resolveUnitIdByLabel(entry.unit));
     setManageExpiresAt(entry.expiresAt ?? "");
     const initialExpiry = entry.expiresAt ? parseISO(entry.expiresAt) : null;
     setManageExpiresAtInput(initialExpiry && isValid(initialExpiry) ? format(initialExpiry, "MM/dd/yyyy") : "");
@@ -507,6 +535,7 @@ export function InventoryClient({
               ? {
                   ...entry,
                   quantity: qty,
+                  unitId: manageUnitId ?? entry.unitId ?? null,
                   unit:
                     displayUnits.find((unit) => unit.id === manageUnitId)?.abbreviation ??
                     displayUnits.find((unit) => unit.id === manageUnitId)?.name ??
@@ -930,7 +959,7 @@ export function InventoryClient({
                   value={manageQuantity}
                   onChange={setManageQuantity}
                   onAdjust={adjustNumber}
-                  unitId={manageUnitId}
+                  unitId={resolvedManageUnitId}
                   onUnitChange={setManageUnitId}
                   units={manageUnitOptions}
                   quantityForLabel={manageUnitQuantity}

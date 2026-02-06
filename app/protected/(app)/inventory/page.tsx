@@ -24,6 +24,7 @@ export default async function InventoryPage() {
             item_id,
             quantity,
             expires_at,
+            unit_id,
             items ( id, name, brand, image_url, aisle, ingredient_catalog_id, spoonacular_ingredient_id, ingredients_catalog ( possible_units ) ),
             units ( name, abbreviation )
           )
@@ -55,6 +56,7 @@ export default async function InventoryPage() {
               itemId: row.item_id,
               quantity: Number(row.quantity ?? 0),
               expiresAt: row.expires_at ?? null,
+              unitId: row.unit_id ?? null,
               itemName: formatInventoryItemName(extractName(row.items)),
               possibleUnits: extractPossibleUnits(row.items),
               imageUrl: extractImage(row.items),

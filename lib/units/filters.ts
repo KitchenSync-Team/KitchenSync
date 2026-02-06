@@ -122,5 +122,12 @@ export function filterUnitsByPossible(
     return false;
   });
 
-  return matches;
+  const universalUnits = imperialUnits.filter(
+    (unit) => unit.name.toLowerCase() === "each" || unit.name.toLowerCase() === "package",
+  );
+  const merged = new Map<string, UnitOption>();
+  for (const unit of [...universalUnits, ...matches]) {
+    merged.set(unit.id, unit);
+  }
+  return Array.from(merged.values());
 }
