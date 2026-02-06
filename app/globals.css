@@ -130,3 +130,62 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .calendar-weeks-before-enter {
+    animation: calendar-slide-in-from-right 260ms ease-out both;
+  }
+  .calendar-weeks-before-exit {
+    animation: calendar-slide-out-to-left 260ms ease-out both;
+  }
+  .calendar-weeks-after-enter {
+    animation: calendar-slide-in-from-left 260ms ease-out both;
+  }
+  .calendar-weeks-after-exit {
+    animation: calendar-slide-out-to-right 260ms ease-out both;
+  }
+}
+
+@keyframes calendar-slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes calendar-slide-out-to-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
+}
+
+@keyframes calendar-slide-in-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes calendar-slide-out-to-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+}

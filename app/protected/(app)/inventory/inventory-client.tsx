@@ -1,23 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { addDays, addMonths, format, isValid, parse, parseISO } from "date-fns";
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   ChevronDown,
+  ChevronUp,
   Loader2,
   Minus,
   Package,
   Plus,
   Search,
   Utensils,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/supabase/utils";
 
@@ -86,7 +91,12 @@ export function InventoryClient({
   const [manageQuantity, setManageQuantity] = useState("1");
   const [manageUnitId, setManageUnitId] = useState<string | null>(null);
   const [manageExpiresAt, setManageExpiresAt] = useState("");
+  const [manageExpiresAtInput, setManageExpiresAtInput] = useState("");
   const [manageSaving, setManageSaving] = useState(false);
+  const [manageCalendarOpen, setManageCalendarOpen] = useState(false);
+  const [manageCalendarMonth, setManageCalendarMonth] = useState<Date | undefined>(undefined);
+  const [manageCalendarDirection, setManageCalendarDirection] = useState<"next" | "prev">("next");
+  const [manageCalendarAnimKey, setManageCalendarAnimKey] = useState(0);
   const [manageError, setManageError] = useState<string | null>(null);
 
   const [consumeOpen, setConsumeOpen] = useState(false);
@@ -98,6 +108,31 @@ export function InventoryClient({
   const [consumeConfirm, setConsumeConfirm] = useState<string | null>(null);
 
   const displayUnits = useMemo(() => units.filter((unit) => unit.type !== "time"), [units]);
+  const manageSelectedDate = useMemo(() => {
+    if (!manageExpiresAt) return undefined;
+    const parsed = parseISO(manageExpiresAt);
+    return isValid(parsed) ? parsed : undefined;
+  }, [manageExpiresAt]);
+  const consumeSelectedEntry = useMemo(() => {
+    if (!consumeStack) return null;
+    return consumeStack.entries.find((item) => item.id === consumeEntryId) ?? consumeStack.entries[0] ?? null;
+  }, [consumeEntryId, consumeStack]);
+
+  useEffect(() => {
+    if (manageSelectedDate) {
+      setManageCalendarMonth(new Date(manageSelectedDate.getFullYear(), manageSelectedDate.getMonth(), 1));
+    }
+  }, [manageSelectedDate]);
+  useEffect(() => {
+    if (!consumeSelectedEntry) return;
+    const parsed = Number.parseInt(consumeAmount, 10);
+    if (!Number.isFinite(parsed)) return;
+    if (parsed > consumeSelectedEntry.quantity) {
+      setConsumeAmount(String(consumeSelectedEntry.quantity));
+      setConsumeConfirm(null);
+      setConsumeError(null);
+    }
+  }, [consumeAmount, consumeSelectedEntry]);
 
   const locationStacks = useMemo(() => {
     return buckets.map((location) => {
@@ -319,7 +354,10 @@ export function InventoryClient({
     )?.id;
     setManageUnitId(unitId ?? null);
     setManageExpiresAt(entry.expiresAt ?? "");
+    const initialExpiry = entry.expiresAt ? parseISO(entry.expiresAt) : null;
+    setManageExpiresAtInput(initialExpiry && isValid(initialExpiry) ? format(initialExpiry, "MM/dd/yyyy") : "");
     setManageError(null);
+    setManageCalendarOpen(false);
     setManageOpen(true);
   }
 
@@ -335,6 +373,9 @@ export function InventoryClient({
     )?.id;
     setManageUnitId(unitId ?? null);
     setManageExpiresAt(entry.expiresAt ?? "");
+    const initialExpiry = entry.expiresAt ? parseISO(entry.expiresAt) : null;
+    setManageExpiresAtInput(initialExpiry && isValid(initialExpiry) ? format(initialExpiry, "MM/dd/yyyy") : "");
+    setManageCalendarOpen(false);
   }
 
   function adjustNumber(value: string, delta: number, min = 1) {
@@ -347,7 +388,7 @@ export function InventoryClient({
   async function handleManageSave() {
     if (!manageTarget) return;
     const qty = Number.parseInt(manageQuantity, 10);
-    if (!Number.isFinite(qty) || qty <= 0) {
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 999) {
       setManageError("Enter a valid quantity.");
       return;
     }
@@ -421,6 +462,10 @@ export function InventoryClient({
 
     const entry = consumeStack.entries.find((e) => e.id === consumeEntryId);
     if (!entry) return;
+    if (qty > entry.quantity) {
+      setConsumeError(`You only have ${entry.quantity} ${entry.unit ?? ""} available.`);
+      return;
+    }
 
     const remaining = entry.quantity - qty;
     const confirmMessage =
@@ -736,94 +781,245 @@ export function InventoryClient({
         </DialogContent>
       </Dialog>
 
+      {/* Manage modal */}
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader className="items-end text-right">
-            <DialogTitle>Manage ingredient</DialogTitle>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Manage {manageTarget?.itemName ?? "ingredient"}</DialogTitle>
+            <DialogDescription>Update quantities, units, and expiration details for this ingredient.</DialogDescription>
           </DialogHeader>
           {manageTarget && (
-            <div className="space-y-4 text-right">
-              <div className="text-sm text-muted-foreground">{manageTarget.itemName}</div>
+            <div className="space-y-4">
               {manageStack && manageStack.entries.length > 1 && (
-                <div className="space-y-2 max-w-sm ml-auto">
-                  <Label className="text-right">Choose entry</Label>
+                <div className="space-y-1">
+                  <Label>Choose entry</Label>
                   <Select
                     value={manageEntryId ?? "none"}
                     onValueChange={(value) => selectManageEntry(value === "none" ? null : value)}
                   >
-                    <SelectTrigger className="text-right">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select an entry" />
                     </SelectTrigger>
                     <SelectContent>
                       {manageStack.entries.map((entry) => (
                         <SelectItem key={entry.id} value={entry.id}>
-                          {entry.quantity} {entry.unit ?? ""} · {formatExpiry(entry.expiresAt)}
+                          {entry.quantity} {entry.unit ?? ""} - {formatExpiry(entry.expiresAt)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-sm ml-auto">
-                <div className="space-y-2 max-w-[220px] ml-auto">
-                  <Label htmlFor="manage-qty" className="text-right">Quantity</Label>
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setManageQuantity((value) => adjustNumber(value, -1))}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="manage-qty">Quantity</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-20">
+                      <Input
+                        id="manage-qty"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={3}
+                        value={manageQuantity}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          if (!raw) {
+                            setManageQuantity(raw);
+                            return;
+                          }
+                          const parsed = Number.parseInt(raw, 10);
+                          if (!Number.isFinite(parsed)) {
+                            setManageQuantity(raw);
+                            return;
+                          }
+                          setManageQuantity(String(Math.min(parsed, 999)));
+                        }}
+                        className="h-8 w-20 pr-8 px-2"
+                      />
+                      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-5 w-5"
+                          aria-label="Increase quantity"
+                          onClick={() =>
+                            setManageQuantity((value) => {
+                              const next = adjustNumber(value, 1);
+                              const parsed = Number.parseInt(next, 10);
+                              return String(Math.min(parsed, 999));
+                            })
+                          }
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-5 w-5"
+                          aria-label="Decrease quantity"
+                          onClick={() => setManageQuantity((value) => adjustNumber(value, -1))}
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Select
+                      value={manageUnitId ?? "none"}
+                      onValueChange={(value) => setManageUnitId(value === "none" ? null : value)}
                     >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      id="manage-qty"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={manageQuantity}
-                      onChange={(event) => setManageQuantity(event.target.value)}
-                      className="w-24 text-right"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setManageQuantity((value) => adjustNumber(value, 1))}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                      <SelectTrigger className="h-8 px-2">
+                        <SelectValue placeholder="Optional" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No unit</SelectItem>
+                        {displayUnits.map((unit) => (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.name}
+                            {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-                <div className="space-y-2 max-w-[220px] ml-auto">
-                  <Label className="text-right">Unit</Label>
-                  <Select
-                    value={manageUnitId ?? "none"}
-                    onValueChange={(value) => setManageUnitId(value === "none" ? null : value)}
-                  >
-                    <SelectTrigger className="text-right">
-                      <SelectValue placeholder="Optional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No unit</SelectItem>
-                      {displayUnits.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.name}
-                          {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 sm:col-span-2 max-w-[240px] ml-auto">
-                  <Label htmlFor="manage-exp" className="text-right">Expiration date</Label>
-                  <Input
-                    id="manage-exp"
-                    type="date"
-                    value={manageExpiresAt}
-                    onChange={(event) => setManageExpiresAt(event.target.value)}
-                    className="text-right"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="manage-exp">Expiration date</Label>
+                  <div className="flex items-center gap-0">
+                    <div className="relative w-[7.25rem]">
+                      <Input
+                        id="manage-exp"
+                        type="text"
+                        placeholder="Select date"
+                        value={manageExpiresAtInput}
+                        readOnly
+                        onClick={() => setManageCalendarOpen(true)}
+                        className="h-8 w-full pr-7"
+                      />
+                      <Popover open={manageCalendarOpen} onOpenChange={setManageCalendarOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                            aria-label="Pick expiration date"
+                          >
+                            <CalendarIcon className="h-3.5 w-3.5" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          side="bottom"
+                          avoidCollisions={false}
+                          align="end"
+                          sideOffset={-305}
+                          alignOffset={-150}
+                          className="w-auto border-0 p-0 shadow-none origin-top-right data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-1"
+                        >
+                          <Card className="max-w-[260px] py-3">
+                            <CardContent className="px-3">
+                              <div
+                                key={manageCalendarAnimKey}
+                                className={cn(
+                                  "animate-in fade-in-0 duration-200",
+                                  manageCalendarDirection === "next"
+                                    ? "slide-in-from-right-3"
+                                    : "slide-in-from-left-3",
+                                )}
+                              >
+                                <Calendar
+                                  mode="single"
+                                  selected={manageSelectedDate}
+                                  month={manageCalendarMonth}
+                                  onMonthChange={(nextMonth) => {
+                                    if (manageCalendarMonth && nextMonth) {
+                                      setManageCalendarDirection(
+                                        nextMonth > manageCalendarMonth ? "next" : "prev",
+                                      );
+                                    }
+                                    setManageCalendarMonth(nextMonth);
+                                    setManageCalendarAnimKey((value) => value + 1);
+                                  }}
+                                  onSelect={(date) => {
+                                    if (!date) {
+                                      setManageExpiresAt("");
+                                      setManageExpiresAtInput("");
+                                      return;
+                                    }
+                                    setManageExpiresAt(format(date, "yyyy-MM-dd"));
+                                    setManageExpiresAtInput(format(date, "MM/dd/yyyy"));
+                                    setManageCalendarMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+                                  }}
+                                  fixedWeeks
+                                  className="bg-transparent p-0 [--cell-size:--spacing(8)]"
+                                />
+                              </div>
+                            </CardContent>
+                            <CardFooter className="flex flex-col gap-2 border-t px-3 pt-2 pb-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { label: "+3d", kind: "days", value: 3 },
+                                  { label: "+1w", kind: "days", value: 7 },
+                                  { label: "+2w", kind: "days", value: 14 },
+                                  { label: "+1m", kind: "months", value: 1 },
+                                ].map((preset) => (
+                                  <Button
+                                    key={preset.label}
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 px-2 text-xs"
+                                    onClick={() => {
+                                      const now = new Date();
+                                      const newDate =
+                                        preset.kind === "months"
+                                          ? addMonths(now, preset.value)
+                                          : addDays(now, preset.value);
+                                      setManageExpiresAt(format(newDate, "yyyy-MM-dd"));
+                                      setManageExpiresAtInput(format(newDate, "MM/dd/yyyy"));
+                                      const nextMonth = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
+                                      if (manageCalendarMonth) {
+                                        setManageCalendarDirection(
+                                          nextMonth > manageCalendarMonth ? "next" : "prev",
+                                        );
+                                      }
+                                      setManageCalendarMonth(nextMonth);
+                                      setManageCalendarAnimKey((value) => value + 1);
+                                    }}
+                                  >
+                                    {preset.label}
+                                  </Button>
+                                ))}
+                              </div>
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                onClick={() => setManageCalendarOpen(false)}
+                              >
+                                Save
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {manageExpiresAtInput && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-1 h-8 text-red-600 hover:text-red-600"
+                        onClick={() => {
+                          setManageExpiresAt("");
+                          setManageExpiresAtInput("");
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Leave blank for no expiration.</p>
                 </div>
               </div>
               {manageError && <p className="text-sm text-destructive">{manageError}</p>}
@@ -841,17 +1037,18 @@ export function InventoryClient({
         </DialogContent>
       </Dialog>
 
+      {/* Consume modal */}
       <Dialog open={consumeOpen} onOpenChange={setConsumeOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader className="items-end text-right">
-            <DialogTitle>Consume ingredient</DialogTitle>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Consume {consumeStack?.itemName ?? "ingredient"}</DialogTitle>
+            <DialogDescription>Remove an amount from a specific ingredient in your inventory.</DialogDescription>
           </DialogHeader>
           {consumeStack && (
-            <div className="space-y-4 text-right">
-              <div className="text-sm text-muted-foreground">{consumeStack.itemName}</div>
+            <div className="space-y-4">
               {consumeStack.entries.length > 1 && (
-                <div className="space-y-2 max-w-sm ml-auto">
-                  <Label className="text-right">Choose entry</Label>
+                <div className="space-y-1">
+                  <Label>Choose entry</Label>
                   <Select
                     value={consumeEntryId ?? "none"}
                     onValueChange={(value) => {
@@ -859,59 +1056,117 @@ export function InventoryClient({
                       setConsumeConfirm(null);
                     }}
                   >
-                    <SelectTrigger className="text-right">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select an entry" />
                     </SelectTrigger>
                     <SelectContent>
                       {consumeStack.entries.map((entry) => (
                         <SelectItem key={entry.id} value={entry.id}>
-                          {entry.quantity} {entry.unit ?? ""} · {formatExpiry(entry.expiresAt)}
+                          {entry.quantity} {entry.unit ?? ""} - {formatExpiry(entry.expiresAt)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-              <div className="space-y-2 max-w-[220px] ml-auto">
-                <Label htmlFor="consume-amount" className="text-right">Amount to consume</Label>
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      setConsumeAmount((value) => adjustNumber(value, -1));
-                      setConsumeConfirm(null);
-                    }}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <Input
-                    id="consume-amount"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={consumeAmount}
-                    onChange={(event) => {
-                      setConsumeAmount(event.target.value);
-                      setConsumeConfirm(null);
-                    }}
-                    className="w-24 text-right"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      setConsumeAmount((value) => adjustNumber(value, 1));
-                      setConsumeConfirm(null);
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="consume-amount">Quantity</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-20">
+                      <Input
+                        id="consume-amount"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={consumeAmount}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const maxQty = consumeSelectedEntry?.quantity ?? null;
+                          const hasMax = typeof maxQty === "number";
+                          if (!raw) {
+                            setConsumeAmount(raw);
+                            setConsumeConfirm(null);
+                            setConsumeError(null);
+                            return;
+                          }
+                          const parsed = Number.parseInt(raw, 10);
+                          if (!Number.isFinite(parsed)) {
+                            setConsumeAmount(raw);
+                            setConsumeConfirm(null);
+                            setConsumeError(null);
+                            return;
+                          }
+                          const next = hasMax ? Math.min(parsed, maxQty) : parsed;
+                          setConsumeAmount(String(next));
+                          setConsumeConfirm(null);
+                          setConsumeError(null);
+                        }}
+                        className="h-8 w-20 pr-8 px-2"
+                      />
+                      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-5 w-5"
+                          aria-label="Increase quantity"
+                        onClick={() => {
+                          const maxQty = consumeSelectedEntry?.quantity ?? null;
+                          setConsumeAmount((value) => {
+                            const next = adjustNumber(value, 1);
+                            if (typeof maxQty !== "number") return next;
+                            const parsed = Number.parseInt(next, 10);
+                            return String(Math.min(parsed, maxQty));
+                          });
+                          setConsumeConfirm(null);
+                          setConsumeError(null);
+                        }}
+                      >
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-5 w-5"
+                          aria-label="Decrease quantity"
+                        onClick={() => {
+                          setConsumeAmount((value) => adjustNumber(value, -1));
+                          setConsumeConfirm(null);
+                          setConsumeError(null);
+                        }}
+                      >
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    {(() => {
+                      const unitLabel = consumeSelectedEntry?.unit ?? "No unit";
+                      return (
+                        <Select value={unitLabel} disabled>
+                          <SelectTrigger className="h-8 px-2">
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={unitLabel}>{unitLabel}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      );
+                    })()}
+                  </div>
+                  {consumeSelectedEntry && (
+                    <p className="text-xs text-muted-foreground">
+                      On hand: {consumeSelectedEntry.quantity} {consumeSelectedEntry.unit ?? ""}
+                    </p>
+                  )}
                 </div>
               </div>
-              {consumeConfirm && <p className="text-xs text-muted-foreground">{consumeConfirm}</p>}
+              {consumeConfirm && (
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {consumeConfirm}
+                </div>
+              )}
               {consumeError && <p className="text-sm text-destructive">{consumeError}</p>}
             </div>
           )}
@@ -978,12 +1233,12 @@ function StackCard({
             <p className="line-clamp-2 text-sm font-semibold">{stack.itemName}</p>
             <p className="text-xs text-muted-foreground">
               {top.quantity}
-              {top.unit ? ` ${top.unit}` : ""} · {formatExpiry(top.expiresAt)}
+              {top.unit ? ` ${top.unit}` : ""} - {formatExpiry(top.expiresAt)}
             </p>
           </div>
           <div className="mt-auto flex items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={onManage} className="gap-1">
-              <Calendar className="h-4 w-4" />
+              <CalendarIcon className="h-4 w-4" />
               Manage
             </Button>
             <Button size="sm" onClick={onConsume} className="gap-1">
@@ -996,3 +1251,4 @@ function StackCard({
     </div>
   );
 }
+
