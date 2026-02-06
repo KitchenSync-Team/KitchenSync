@@ -1,34 +1,55 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Package, Search, ShoppingBag, Warehouse } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Calendar,
+  ChevronDown,
+  Loader2,
+  Minus,
+  Package,
+  Plus,
+  Search,
+  Utensils,
+} from "lucide-react";
 
-import { AddIngredientSheet } from "@/components/ingredients/add-ingredient-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/supabase/utils";
 
 type UnitOption = { id: string; name: string; abbreviation?: string | null; type: string };
-type LocationItem = {
+
+type InventoryEntry = {
   id: string;
+  itemId: string;
   itemName: string;
+  imageUrl: string | null;
+  aisle: string | null;
   quantity: number;
   unit: string | null;
   expiresAt: string | null;
 };
+
 type LocationBucket = {
   id: string;
   name: string;
   icon?: string | null;
-  inventory: LocationItem[];
+  inventory: InventoryEntry[];
 };
 
 type IngredientResult = { id: number; name: string; image: string | null; aisle: string | null };
-type GroceryResult = { id: number; title: string; image: string | null };
+
+type Stack = {
+  itemId: string;
+  itemName: string;
+  imageUrl: string | null;
+  aisle: string | null;
+  entries: InventoryEntry[];
+};
 
 export function InventoryClient({
   kitchenId,
@@ -39,52 +60,111 @@ export function InventoryClient({
   units: UnitOption[];
   locations: LocationBucket[];
 }) {
-  const [mode, setMode] = useState<"ingredients" | "groceries">("ingredients");
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [cached, setCached] = useState(false);
-  const [ingredientResults, setIngredientResults] = useState<IngredientResult[]>([]);
-  const [groceryResults, setGroceryResults] = useState<GroceryResult[]>([]);
-  const [selected, setSelected] = useState<{
-    name: string;
-    brand?: string;
-    id?: number;
-    source?: string;
-    imageUrl?: string;
-    aisle?: string;
-    possibleUnits?: string[];
-  } | null>(null);
-  const [suggestedUnits, setSuggestedUnits] = useState<string[]>([]);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [buckets, setBuckets] = useState<LocationBucket[]>(locations);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailContent, setDetailContent] = useState<{
-    title: string;
-    image?: string | null;
-    aisle?: string | null;
-    possibleUnits?: string[];
-    badges?: string[];
-    ingredientList?: string;
-    nutrition?: { nutrients?: { name: string; amount?: number; unit?: string }[] };
-    type: "ingredient" | "grocery";
-  } | null>(null);
+  const [openLocations, setOpenLocations] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(locations.map((loc) => [loc.id, true])),
+  );
 
-  async function runSearch() {
-    if (!query.trim()) {
-      setError("Enter an item to search.");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addStep, setAddStep] = useState<"search" | "details">("search");
+  const [addQuery, setAddQuery] = useState("");
+  const [addResults, setAddResults] = useState<IngredientResult[]>([]);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addSelection, setAddSelection] = useState<IngredientResult | null>(null);
+  const [addQuantity, setAddQuantity] = useState("1");
+  const [addUnitId, setAddUnitId] = useState<string | null>(null);
+  const [addExpiresAt, setAddExpiresAt] = useState("");
+  const [addLocationId, setAddLocationId] = useState<string | null>(locations[0]?.id ?? null);
+  const [addSaving, setAddSaving] = useState(false);
+  const [addSuggestedUnits, setAddSuggestedUnits] = useState<string[]>([]);
+
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageStack, setManageStack] = useState<Stack | null>(null);
+  const [manageEntryId, setManageEntryId] = useState<string | null>(null);
+  const [manageTarget, setManageTarget] = useState<InventoryEntry | null>(null);
+  const [manageQuantity, setManageQuantity] = useState("1");
+  const [manageUnitId, setManageUnitId] = useState<string | null>(null);
+  const [manageExpiresAt, setManageExpiresAt] = useState("");
+  const [manageSaving, setManageSaving] = useState(false);
+  const [manageError, setManageError] = useState<string | null>(null);
+
+  const [consumeOpen, setConsumeOpen] = useState(false);
+  const [consumeStack, setConsumeStack] = useState<Stack | null>(null);
+  const [consumeEntryId, setConsumeEntryId] = useState<string | null>(null);
+  const [consumeAmount, setConsumeAmount] = useState("");
+  const [consumeSaving, setConsumeSaving] = useState(false);
+  const [consumeError, setConsumeError] = useState<string | null>(null);
+  const [consumeConfirm, setConsumeConfirm] = useState<string | null>(null);
+
+  const displayUnits = useMemo(() => units.filter((unit) => unit.type !== "time"), [units]);
+
+  const locationStacks = useMemo(() => {
+    return buckets.map((location) => {
+      const grouped = new Map<string, Stack>();
+      for (const entry of location.inventory) {
+        const key = `${entry.itemId}`;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.entries.push(entry);
+        } else {
+          grouped.set(key, {
+            itemId: entry.itemId,
+            itemName: entry.itemName,
+            imageUrl: entry.imageUrl,
+            aisle: entry.aisle,
+            entries: [entry],
+          });
+        }
+      }
+
+      const stacks = Array.from(grouped.values())
+        .map((stack) => ({
+          ...stack,
+          entries: stack.entries.sort(sortByExpiry),
+        }))
+        .sort((a, b) => sortByExpiry(a.entries[0], b.entries[0]));
+
+      return {
+        ...location,
+        stacks,
+      };
+    });
+  }, [buckets]);
+
+  function sortByExpiry(a: InventoryEntry, b: InventoryEntry) {
+    if (!a.expiresAt && !b.expiresAt) return 0;
+    if (!a.expiresAt) return 1;
+    if (!b.expiresAt) return -1;
+    return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+  }
+
+  function formatExpiry(value: string | null) {
+    if (!value) return "No expiration";
+    return value;
+  }
+
+  function getPlaceholderIcon(aisle: string | null) {
+    if (!aisle) return Package;
+    const lower = aisle.toLowerCase();
+    if (lower.includes("dairy") || lower.includes("egg")) return Utensils;
+    if (lower.includes("meat") || lower.includes("seafood")) return Utensils;
+    if (lower.includes("produce") || lower.includes("vegetable") || lower.includes("fruit")) return Utensils;
+    return Package;
+  }
+
+  async function runAddSearch() {
+    if (!addQuery.trim()) {
+      setAddError("Enter an ingredient to search.");
       return;
     }
-    setLoading(true);
-    setError(null);
-    setCached(false);
+    setAddLoading(true);
+    setAddError(null);
     try {
-      const endpoint =
-        mode === "ingredients" ? "/api/ingredients/search" : "/api/groceries/search";
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/ingredients/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: addQuery.trim() }),
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
@@ -94,513 +174,825 @@ export function InventoryClient({
             : typeof data.detail === "string"
               ? data.detail
               : "Search failed";
-        setError(message);
+        setAddError(message);
+        return;
+      }
+      const results = Array.isArray(data.results) ? (data.results as IngredientResult[]) : [];
+      setAddResults(results);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Search failed";
+      setAddError(message);
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
+  async function loadIngredientDetails(ingredient: IngredientResult) {
+    try {
+      const res = await fetch(`/api/ingredients/${ingredient.id}`);
+      const data = await res.json();
+      const units = Array.isArray(data.possibleUnits)
+        ? (data.possibleUnits as unknown[]).filter((value): value is string => typeof value === "string")
+        : [];
+      setAddSuggestedUnits(units);
+      if (units.length > 0) {
+        const suggested = resolveSuggestedUnitId(units);
+        setAddUnitId(suggested ?? null);
+      }
+    } catch {
+      setAddSuggestedUnits([]);
+    }
+  }
+
+  function resolveSuggestedUnitId(possible: string[]) {
+    const lowered = possible.map((value) => value.toLowerCase());
+    const match = displayUnits.find(
+      (unit) =>
+        (unit.name && lowered.includes(unit.name.toLowerCase())) ||
+        (unit.abbreviation && lowered.includes(unit.abbreviation.toLowerCase())),
+    );
+    return match?.id ?? null;
+  }
+
+  function resetAddState() {
+    setAddStep("search");
+    setAddQuery("");
+    setAddResults([]);
+    setAddSelection(null);
+    setAddQuantity("1");
+    setAddUnitId(null);
+    setAddExpiresAt("");
+    setAddError(null);
+    setAddSuggestedUnits([]);
+  }
+
+  async function handleAddItem() {
+    if (!addSelection) return;
+    const qty = Number(addQuantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setAddError("Enter a valid quantity.");
+      return;
+    }
+    if (!addLocationId) {
+      setAddError("Select a location.");
+      return;
+    }
+
+    setAddSaving(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/ingredients/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kitchenId,
+          name: addSelection.name,
+          quantity: qty,
+          unitId: addUnitId || null,
+          locationId: addLocationId,
+          expiresAt: addExpiresAt || null,
+          spoonacularId: addSelection.id,
+          imageUrl: addSelection.image ?? undefined,
+          aisle: addSelection.aisle ?? undefined,
+          possibleUnits: addSuggestedUnits.length > 0 ? addSuggestedUnits : undefined,
+        }),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : typeof data.detail === "string"
+              ? data.detail
+              : "Could not add item";
+        setAddError(message);
         return;
       }
 
-      const list = Array.isArray(data.results)
-        ? (data.results as unknown[])
-        : Array.isArray((data as { products?: unknown }).products)
-          ? ((data as { products?: unknown }).products as unknown[])
-          : [];
+      const inventoryId =
+        typeof data.inventoryId === "string" ? data.inventoryId : String(Date.now());
+      setBuckets((current) =>
+        current.map((loc) =>
+          loc.id === addLocationId
+            ? {
+                ...loc,
+                inventory: [
+                  {
+                    id: inventoryId,
+                    itemId: String(data.itemId ?? addSelection.id),
+                    itemName: addSelection.name,
+                    imageUrl: addSelection.image ?? null,
+                    aisle: addSelection.aisle ?? null,
+                    quantity: qty,
+                    unit:
+                      displayUnits.find((unit) => unit.id === addUnitId)?.abbreviation ??
+                      displayUnits.find((unit) => unit.id === addUnitId)?.name ??
+                      null,
+                    expiresAt: addExpiresAt || null,
+                  },
+                  ...loc.inventory,
+                ],
+              }
+            : loc,
+        ),
+      );
 
-      if (mode === "ingredients") {
-        const mapped = list
-          .map((row) => {
-            if (!row || typeof row !== "object") return null;
-            const r = row as IngredientResult;
-            return {
-              id: r.id,
-              name: (r as { name?: string }).name ?? "",
-              image: (r as { image?: string | null }).image ?? null,
-              aisle: (r as { aisle?: string | null }).aisle ?? null,
-            };
-          })
-          .filter(
-            (r): r is IngredientResult =>
-              r !== null && Number.isFinite(r.id) && Boolean(r.name),
-          );
-        setIngredientResults(mapped);
-      } else {
-        const mapped = list
-          .map((row) => {
-            if (!row || typeof row !== "object") return null;
-            const r = row as GroceryResult;
-            const title = (r as { title?: string }).title ?? "";
-            return { id: r.id, title, image: (r as { image?: string | null }).image ?? null };
-          })
-          .filter((r): r is GroceryResult => Boolean(r?.id) && Boolean(r?.title));
-        setGroceryResults(mapped);
-      }
-      setCached(Boolean((data as { cached?: boolean }).cached));
+      setAddOpen(false);
+      resetAddState();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Search failed";
-      setError(message);
+      const message = err instanceof Error ? err.message : "Could not add item";
+      setAddError(message);
     } finally {
-      setLoading(false);
+      setAddSaving(false);
     }
   }
 
-  function handleAddSelection(
-    target: { name: string; brand?: string; id?: number; imageUrl?: string; aisle?: string },
-    source: "ingredient" | "grocery",
-  ) {
-    setSelected({ ...target, source: "spoonacular" });
-    setSuggestedUnits([]);
-    if (source === "ingredient" && target.id) {
-      void (async () => {
-        try {
-          const res = await fetch(`/api/ingredients/${target.id}`);
-          const data = await res.json();
-          if (res.ok) {
-            const unitList = Array.isArray(data.possibleUnits)
-              ? (data.possibleUnits as unknown[]).filter(
-                  (value): value is string => typeof value === "string",
-                )
-              : [];
-            setSuggestedUnits(unitList);
-            setSelected((current) =>
-              current
-                ? {
-                    ...current,
-                    possibleUnits: unitList,
-                    imageUrl:
-                      (typeof data.image === "string" ? data.image : undefined) ??
-                      current.imageUrl,
-                    aisle:
-                      (typeof data.aisle === "string" ? data.aisle : undefined) ??
-                      current.aisle,
-                  }
-                : current,
-            );
-          }
-        } catch {
-          // ignore
-        }
-      })();
-    }
-    setSheetOpen(true);
+  function openManage(stack: Stack) {
+    const entry = stack.entries[0];
+    setManageStack(stack);
+    setManageEntryId(entry?.id ?? null);
+    if (!entry) return;
+    setManageTarget(entry);
+    setManageQuantity(String(entry.quantity ?? 1));
+    const unitId = displayUnits.find(
+      (unit) => unit.abbreviation === entry.unit || unit.name === entry.unit,
+    )?.id;
+    setManageUnitId(unitId ?? null);
+    setManageExpiresAt(entry.expiresAt ?? "");
+    setManageError(null);
+    setManageOpen(true);
   }
 
-  async function handleViewDetails(item: IngredientResult | GroceryResult, type: "ingredient" | "grocery") {
-    if (type === "ingredient") {
-      try {
-        const res = await fetch(`/api/ingredients/${item.id}`);
-        const data = await res.json();
-        const possibleUnits = Array.isArray(data.possibleUnits)
-          ? (data.possibleUnits as unknown[]).filter((value): value is string => typeof value === "string")
-          : [];
-        setDetailContent({
-          title: "name" in item ? item.name : "",
-          image: typeof data.image === "string" ? data.image : item.image,
-          aisle: typeof data.aisle === "string" ? data.aisle : ("aisle" in item ? item.aisle ?? null : null),
-          possibleUnits,
-          nutrition: typeof data.nutrition === "object" ? data.nutrition : undefined,
-          type: "ingredient",
-        });
-        setDetailOpen(true);
-      } catch (err) {
-        console.error("Detail fetch error:", err);
-        setDetailContent({
-          title: "name" in item ? item.name : "",
-          image: item.image,
-          aisle: "aisle" in item ? item.aisle ?? null : null,
-          possibleUnits: [],
-          type: "ingredient",
-        });
+  function selectManageEntry(entryId: string | null) {
+    if (!manageStack) return;
+    const entry = manageStack.entries.find((item) => item.id === entryId);
+    if (!entry) return;
+    setManageEntryId(entry.id);
+    setManageTarget(entry);
+    setManageQuantity(String(entry.quantity ?? 1));
+    const unitId = displayUnits.find(
+      (unit) => unit.abbreviation === entry.unit || unit.name === entry.unit,
+    )?.id;
+    setManageUnitId(unitId ?? null);
+    setManageExpiresAt(entry.expiresAt ?? "");
+  }
+
+  function adjustNumber(value: string, delta: number, min = 1) {
+    const parsed = Number.parseInt(value, 10);
+    const next = Number.isFinite(parsed) ? parsed + delta : min;
+    const clamped = Math.max(min, Number.isFinite(next) ? next : min);
+    return String(clamped);
+  }
+
+  async function handleManageSave() {
+    if (!manageTarget) return;
+    const qty = Number.parseInt(manageQuantity, 10);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setManageError("Enter a valid quantity.");
+      return;
+    }
+    setManageSaving(true);
+    setManageError(null);
+    try {
+      const res = await fetch(`/api/inventory/${manageTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quantity: qty,
+          unitId: manageUnitId ?? null,
+          expiresAt: manageExpiresAt || null,
+        }),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : typeof data.detail === "string"
+              ? data.detail
+              : "Update failed";
+        setManageError(message);
+        return;
       }
-    } else {
-      try {
-        const res = await fetch(`/api/groceries/${item.id}`);
-        const data = await res.json();
-        setDetailContent({
-          title: (item as GroceryResult).title,
-          image: typeof data.image === "string" ? data.image : (item as GroceryResult).image,
-          aisle: typeof data.aisle === "string" ? data.aisle : null,
-          possibleUnits: undefined,
-          badges: Array.isArray(data.badges)
-            ? (data.badges as unknown[]).filter((v): v is string => typeof v === "string")
-            : undefined,
-          ingredientList: typeof data.ingredientList === "string" ? data.ingredientList : undefined,
-          nutrition: typeof data.nutrition === "object" ? data.nutrition : undefined,
-          type: "grocery",
-        });
-      } catch (err) {
-        console.error("Grocery detail fetch error:", err);
-        setDetailContent({
-          title: (item as GroceryResult).title,
-          image: (item as GroceryResult).image,
-          aisle: null,
-          possibleUnits: undefined,
-          type: "grocery",
-        });
-      }
-      setDetailOpen(true);
+      setBuckets((current) =>
+        current.map((loc) => ({
+          ...loc,
+          inventory: loc.inventory.map((entry) =>
+            entry.id === manageTarget.id
+              ? {
+                  ...entry,
+                  quantity: qty,
+                  unit:
+                    displayUnits.find((unit) => unit.id === manageUnitId)?.abbreviation ??
+                    displayUnits.find((unit) => unit.id === manageUnitId)?.name ??
+                    null,
+                  expiresAt: manageExpiresAt || null,
+                }
+              : entry,
+          ),
+        })),
+      );
+      setManageOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Update failed";
+      setManageError(message);
+    } finally {
+      setManageSaving(false);
     }
   }
 
-  function handleAddSuccess(entry: { name: string; quantity: number; locationId?: string | null; unitLabel?: string | null }) {
-    if (!entry.locationId) return;
-    const unitLabel = entry.unitLabel ?? null;
-    setBuckets((current) =>
-      current.map((bucket) =>
-        bucket.id === entry.locationId
-          ? {
-              ...bucket,
-              inventory: [
-                {
-                  id: String(Date.now()),
-                  itemName: entry.name,
-                  quantity: entry.quantity,
-                  unit: unitLabel,
-                  expiresAt: null,
-                },
-                ...bucket.inventory,
-              ],
-            }
-          : bucket,
-      ),
-    );
+  function openConsume(stack: Stack) {
+    setConsumeStack(stack);
+    const first = stack.entries[0];
+    setConsumeEntryId(first?.id ?? null);
+    setConsumeAmount("");
+    setConsumeError(null);
+    setConsumeConfirm(null);
+    setConsumeOpen(true);
   }
 
-  const activeResults = mode === "ingredients" ? ingredientResults : groceryResults;
+  async function handleConsume() {
+    if (!consumeStack || !consumeEntryId) return;
+    const qty = Number.parseInt(consumeAmount, 10);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setConsumeError("Enter a valid amount to consume.");
+      return;
+    }
+
+    const entry = consumeStack.entries.find((e) => e.id === consumeEntryId);
+    if (!entry) return;
+
+    const remaining = entry.quantity - qty;
+    const confirmMessage =
+      remaining <= 0
+        ? `This will consume all ${entry.quantity} ${entry.unit ?? ""} and remove the item.`
+        : `This will use ${qty} ${entry.unit ?? ""} and leave ${remaining} ${entry.unit ?? ""}.`;
+    if (!consumeConfirm) {
+      setConsumeConfirm(confirmMessage);
+      return;
+    }
+
+    setConsumeSaving(true);
+    setConsumeError(null);
+    try {
+      const res = await fetch(`/api/inventory/${entry.id}/consume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: qty }),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : typeof data.detail === "string"
+              ? data.detail
+              : "Consume failed";
+        setConsumeError(message);
+        return;
+      }
+
+      const removed = data.removed === true;
+      const newQuantity = typeof data.quantity === "number" ? data.quantity : remaining;
+
+      setBuckets((current) =>
+        current.map((loc) => ({
+          ...loc,
+          inventory: removed
+            ? loc.inventory.filter((e) => e.id !== entry.id)
+            : loc.inventory.map((e) => (e.id === entry.id ? { ...e, quantity: newQuantity } : e)),
+        })),
+      );
+
+      setConsumeOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Consume failed";
+      setConsumeError(message);
+    } finally {
+      setConsumeSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Search & add</CardTitle>
-          <CardDescription>Use Spoonacular to find ingredients or groceries, then add them to a location.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3">
-            <Tabs value={mode} onValueChange={(value) => setMode(value as "ingredients" | "groceries")}>
-              <TabsList className="w-full sm:w-auto">
-                <TabsTrigger value="ingredients">Ingredients</TabsTrigger>
-                <TabsTrigger value="groceries">Groceries</TabsTrigger>
-              </TabsList>
-              <TabsContent value="ingredients" className="mt-3 flex flex-col gap-3">
-                <SearchBar
-                  query={query}
-                  onQueryChange={setQuery}
-                  onSearch={runSearch}
-                  loading={loading}
-                  cached={cached}
-                />
-              </TabsContent>
-              <TabsContent value="groceries" className="mt-3 flex flex-col gap-3">
-                <SearchBar
-                  query={query}
-                  onQueryChange={setQuery}
-                  onSearch={runSearch}
-                  loading={loading}
-                  cached={cached}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {loading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <Card key={idx} className="h-40 animate-pulse bg-muted" />
-              ))}
-            </div>
-          ) : activeResults.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {activeResults.map((item) =>
-                mode === "ingredients" ? (
-                  <ResultCard
-                    key={`ing-${(item as IngredientResult).id}`}
-                    title={(item as IngredientResult).name}
-                    image={(item as IngredientResult).image}
-                    meta={(item as IngredientResult).aisle ?? undefined}
-              icon="ingredient"
-              onAdd={() =>
-                handleAddSelection(
-                  {
-                    name: (item as IngredientResult).name,
-                    id: (item as IngredientResult).id,
-                    imageUrl: (item as IngredientResult).image ?? undefined,
-                    aisle: (item as IngredientResult).aisle ?? undefined,
-                  },
-                  "ingredient",
-                )
-              }
-              onView={() => handleViewDetails(item as IngredientResult, "ingredient")}
-                  />
-                ) : (
-                  <ResultCard
-                    key={`gro-${(item as GroceryResult).id}`}
-                    title={(item as GroceryResult).title}
-                    image={(item as GroceryResult).image}
-              icon="grocery"
-              onAdd={() =>
-                handleAddSelection(
-                  {
-                    name: (item as GroceryResult).title,
-                    id: (item as GroceryResult).id,
-                    imageUrl: (item as GroceryResult).image ?? undefined,
-                  },
-                  "grocery",
-                )
-              }
-              onView={() => handleViewDetails(item as GroceryResult, "grocery")}
-                  />
-                ),
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Search to see results.</p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Inventory</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Manage your kitchen inventory</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Organize ingredients by location, track quantities, and stay ahead of expirations.
+          </p>
+        </div>
+        <Button onClick={() => setAddOpen(true)} className="gap-2 self-start sm:self-auto">
+          <Plus className="h-4 w-4" />
+          Add item
+        </Button>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Manage by location</CardTitle>
-          <CardDescription>Review what is in each storage area.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {buckets.map((location) => (
-            <div key={location.id} className="rounded-lg border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-full bg-muted")}>
-                    <Warehouse className="h-4 w-4" />
+      <div className="space-y-4">
+        {locationStacks.map((location) => (
+          <Card key={location.id}>
+            <Collapsible
+              open={openLocations[location.id] ?? true}
+              onOpenChange={(open) =>
+                setOpenLocations((current) => ({ ...current, [location.id]: open }))
+              }
+            >
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">{location.name}</CardTitle>
+                  <CardDescription>
+                    {location.stacks.length} item{location.stacks.length === 1 ? "" : "s"}
+                  </CardDescription>
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    <span>{openLocations[location.id] ?? true ? "Hide" : "Show"}</span>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", (openLocations[location.id] ?? true) && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="grid grid-cols-1 gap-4 justify-items-center sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+                  {location.stacks.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No items here yet.</div>
+                  ) : (
+                    location.stacks.map((stack) => (
+                      <StackCard
+                        key={`${location.id}-${stack.itemId}`}
+                        stack={stack}
+                        onManage={() => openManage(stack)}
+                        onConsume={() => openConsume(stack)}
+                        getPlaceholderIcon={getPlaceholderIcon}
+                        formatExpiry={formatExpiry}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
+        ))}
+      </div>
+
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) resetAddState();
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {addStep === "search" && (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Label htmlFor="add-query">Search ingredients</Label>
+                    <Input
+                      id="add-query"
+                      placeholder="milk, pasta, basil..."
+                      value={addQuery}
+                      onChange={(event) => setAddQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          runAddSearch();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button onClick={runAddSearch} disabled={addLoading} className="gap-2">
+                    {addLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                    Search
+                  </Button>
+                </div>
+                {addError && <p className="text-sm text-destructive">{addError}</p>}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {addResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onClick={() => {
+                        setAddSelection(result);
+                        void loadIngredientDetails(result);
+                      }}
+                      className={cn(
+                        "group flex flex-col rounded-lg border p-3 text-left transition hover:border-primary",
+                        addSelection?.id === result.id && "border-primary bg-muted/50",
+                      )}
+                    >
+                      <div className="flex h-24 items-center justify-center rounded-md bg-muted">
+                        {result.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={result.image}
+                            alt={result.name}
+                            className="h-24 w-full rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="text-sm text-muted-foreground">No image</div>
+                        )}
+                      </div>
+                      <div className="mt-3 space-y-1">
+                        <p className="line-clamp-2 font-medium">{result.name}</p>
+                        {result.aisle && <p className="text-xs text-muted-foreground">{result.aisle}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {addStep === "details" && addSelection && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-md bg-muted">
+                    {addSelection.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={addSelection.image}
+                        alt={addSelection.name}
+                        className="h-14 w-full object-cover"
+                      />
+                    ) : (
+                      <Package className="h-5 w-5 text-muted-foreground" />
+                    )}
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{location.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {location.inventory.length} item{location.inventory.length === 1 ? "" : "s"}
-                    </p>
+                    <p className="font-medium">{addSelection.name}</p>
+                    {addSelection.aisle && (
+                      <p className="text-xs text-muted-foreground">{addSelection.aisle}</p>
+                    )}
                   </div>
                 </div>
-              </div>
-              {location.inventory.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items here yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {location.inventory.slice(0, 6).map((item) => (
-                    <div
-                      key={`${location.id}-${item.id}`}
-                      className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-qty">Quantity</Label>
+                    <Input
+                      id="add-qty"
+                      inputMode="decimal"
+                      value={addQuantity}
+                      onChange={(event) => setAddQuantity(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Unit</Label>
+                    <Select
+                      value={addUnitId ?? "none"}
+                      onValueChange={(value) => setAddUnitId(value === "none" ? null : value)}
                     >
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{item.itemName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity}
-                            {item.unit ? ` ${item.unit}` : ""}{" "}
-                            {item.expiresAt ? `- Expires ${item.expiresAt}` : ""}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {location.inventory.length > 6 && (
-                    <p className="text-xs text-muted-foreground">
-                      +{location.inventory.length - 6} more in this location
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <AddIngredientSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        selection={selected}
-        kitchenId={kitchenId}
-        locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
-        units={units}
-        suggestedUnits={suggestedUnits}
-        onSuccess={handleAddSuccess}
-      />
-
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{detailContent?.title ?? "Details"}</DialogTitle>
-            {detailContent?.aisle && (
-              <p className="text-sm text-muted-foreground">Aisle: {detailContent.aisle}</p>
-            )}
-          </DialogHeader>
-          <div className="space-y-3">
-            {detailContent?.image && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={detailContent.image}
-                alt={detailContent.title}
-                className="h-44 w-full rounded-md object-cover"
-              />
-            )}
-            {detailContent?.badges && detailContent.badges.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Badges</p>
-                <div className="flex flex-wrap gap-2">
-                  {detailContent.badges.slice(0, 12).map((badge) => (
-                    <span
-                      key={badge}
-                      className="rounded-full border px-2 py-1 text-xs text-muted-foreground"
+                      <SelectTrigger>
+                        <SelectValue placeholder="Optional" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No unit</SelectItem>
+                        {displayUnits.map((unit) => (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.name}
+                            {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Location</Label>
+                    <Select
+                      value={addLocationId ?? "none"}
+                      onValueChange={(value) => setAddLocationId(value === "none" ? null : value)}
                     >
-                      {badge.replace(/_/g, " ")}
-                    </span>
-                  ))}
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((location) => (
+                          <SelectItem key={location.id} value={location.id}>
+                            {location.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-exp">Expiration date (optional)</Label>
+                    <Input
+                      id="add-exp"
+                      type="date"
+                      value={addExpiresAt}
+                      onChange={(event) => setAddExpiresAt(event.target.value)}
+                    />
+                  </div>
                 </div>
+                {addError && <p className="text-sm text-destructive">{addError}</p>}
               </div>
             )}
-            {detailContent?.possibleUnits && detailContent.possibleUnits.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Possible units</p>
-                <div className="flex flex-wrap gap-2">
-                  {detailContent.possibleUnits.slice(0, 10).map((unit) => (
-                    <span
-                      key={unit}
-                      className="rounded-full border px-2 py-1 text-xs text-muted-foreground"
-                    >
-                      {unit}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {detailContent?.ingredientList && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Ingredients</p>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {detailContent.ingredientList}
-                </p>
-              </div>
-            )}
-            {detailContent?.nutrition && Array.isArray((detailContent.nutrition as { nutrients?: unknown }).nutrients) && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Nutrition (per serving)</p>
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  {((detailContent.nutrition as { nutrients?: unknown }).nutrients as unknown[])
-                    .filter((n): n is { name?: string; amount?: number; unit?: string } => !!n && typeof n === "object")
-                    .slice(0, 6)
-                    .map((n) => (
-                      <div key={`${n.name}-${n.unit ?? ""}`} className="flex items-center justify-between">
-                        <span>{n.name}</span>
-                        <span>
-                          {typeof n.amount === "number" ? Math.round(n.amount * 100) / 100 : "-"}
-                          {n.unit ? ` ${n.unit}` : ""}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-            {!detailContent?.possibleUnits &&
-              !detailContent?.badges &&
-              !detailContent?.ingredientList &&
-              !detailContent?.nutrition && (
-                <p className="text-sm text-muted-foreground">
-                  No additional details available from Spoonacular for this item.
-                </p>
-              )}
           </div>
+          <DialogFooter>
+            {addStep === "details" ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setAddStep("search");
+                  setAddError(null);
+                }}
+                disabled={addSaving}
+              >
+                Back
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addSaving}>
+                Cancel
+              </Button>
+            )}
+            {addStep === "search" ? (
+              <Button
+                onClick={() => {
+                  if (!addSelection) {
+                    setAddError("Select an ingredient to continue.");
+                    return;
+                  }
+                  setAddStep("details");
+                }}
+                disabled={!addSelection || addSaving}
+              >
+                Continue
+              </Button>
+            ) : (
+              <Button onClick={handleAddItem} disabled={!addSelection || addSaving} className="gap-2">
+                {addSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Add to kitchen
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="items-end text-right">
+            <DialogTitle>Manage ingredient</DialogTitle>
+          </DialogHeader>
+          {manageTarget && (
+            <div className="space-y-4 text-right">
+              <div className="text-sm text-muted-foreground">{manageTarget.itemName}</div>
+              {manageStack && manageStack.entries.length > 1 && (
+                <div className="space-y-2 max-w-sm ml-auto">
+                  <Label className="text-right">Choose entry</Label>
+                  <Select
+                    value={manageEntryId ?? "none"}
+                    onValueChange={(value) => selectManageEntry(value === "none" ? null : value)}
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="Select an entry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {manageStack.entries.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          {entry.quantity} {entry.unit ?? ""} · {formatExpiry(entry.expiresAt)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-sm ml-auto">
+                <div className="space-y-2 max-w-[220px] ml-auto">
+                  <Label htmlFor="manage-qty" className="text-right">Quantity</Label>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setManageQuantity((value) => adjustNumber(value, -1))}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Input
+                      id="manage-qty"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={manageQuantity}
+                      onChange={(event) => setManageQuantity(event.target.value)}
+                      className="w-24 text-right"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setManageQuantity((value) => adjustNumber(value, 1))}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-w-[220px] ml-auto">
+                  <Label className="text-right">Unit</Label>
+                  <Select
+                    value={manageUnitId ?? "none"}
+                    onValueChange={(value) => setManageUnitId(value === "none" ? null : value)}
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No unit</SelectItem>
+                      {displayUnits.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          {unit.name}
+                          {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 sm:col-span-2 max-w-[240px] ml-auto">
+                  <Label htmlFor="manage-exp" className="text-right">Expiration date</Label>
+                  <Input
+                    id="manage-exp"
+                    type="date"
+                    value={manageExpiresAt}
+                    onChange={(event) => setManageExpiresAt(event.target.value)}
+                    className="text-right"
+                  />
+                </div>
+              </div>
+              {manageError && <p className="text-sm text-destructive">{manageError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setManageOpen(false)} disabled={manageSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleManageSave} disabled={manageSaving} className="gap-2">
+              {manageSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={consumeOpen} onOpenChange={setConsumeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="items-end text-right">
+            <DialogTitle>Consume ingredient</DialogTitle>
+          </DialogHeader>
+          {consumeStack && (
+            <div className="space-y-4 text-right">
+              <div className="text-sm text-muted-foreground">{consumeStack.itemName}</div>
+              {consumeStack.entries.length > 1 && (
+                <div className="space-y-2 max-w-sm ml-auto">
+                  <Label className="text-right">Choose entry</Label>
+                  <Select
+                    value={consumeEntryId ?? "none"}
+                    onValueChange={(value) => {
+                      setConsumeEntryId(value === "none" ? null : value);
+                      setConsumeConfirm(null);
+                    }}
+                  >
+                    <SelectTrigger className="text-right">
+                      <SelectValue placeholder="Select an entry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {consumeStack.entries.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          {entry.quantity} {entry.unit ?? ""} · {formatExpiry(entry.expiresAt)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2 max-w-[220px] ml-auto">
+                <Label htmlFor="consume-amount" className="text-right">Amount to consume</Label>
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setConsumeAmount((value) => adjustNumber(value, -1));
+                      setConsumeConfirm(null);
+                    }}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    id="consume-amount"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={consumeAmount}
+                    onChange={(event) => {
+                      setConsumeAmount(event.target.value);
+                      setConsumeConfirm(null);
+                    }}
+                    className="w-24 text-right"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setConsumeAmount((value) => adjustNumber(value, 1));
+                      setConsumeConfirm(null);
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              {consumeConfirm && <p className="text-xs text-muted-foreground">{consumeConfirm}</p>}
+              {consumeError && <p className="text-sm text-destructive">{consumeError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConsumeOpen(false)} disabled={consumeSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleConsume} disabled={consumeSaving} className="gap-2">
+              {consumeSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {consumeConfirm ? "Confirm consumption" : "Continue"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function SearchBar({
-  query,
-  onQueryChange,
-  onSearch,
-  loading,
-  cached,
+function StackCard({
+  stack,
+  onManage,
+  onConsume,
+  getPlaceholderIcon,
+  formatExpiry,
 }: {
-  query: string;
-  onQueryChange: (value: string) => void;
-  onSearch: () => void;
-  loading: boolean;
-  cached: boolean;
+  stack: Stack;
+  onManage: () => void;
+  onConsume: () => void;
+  getPlaceholderIcon: (aisle: string | null) => typeof Package;
+  formatExpiry: (value: string | null) => string;
 }) {
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-      <div className="flex flex-1 flex-col gap-2">
-        <Label htmlFor="inventory-search">Find items</Label>
-        <Input
-          id="inventory-search"
-          placeholder={'milk, pasta, "greek yogurt"...'}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onSearch();
-            }
-          }}
-        />
-      </div>
-      <Button onClick={onSearch} disabled={loading} className="gap-2">
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-        Search
-      </Button>
-      {cached && <span className="text-xs text-muted-foreground">Cached</span>}
-    </div>
-  );
-}
+  const top = stack.entries[0];
+  const PlaceholderIcon = getPlaceholderIcon(stack.aisle);
+  const count = stack.entries.length;
 
-function ResultCard({
-  title,
-  image,
-  meta,
-  icon,
-  onAdd,
-  onView,
-}: {
-  title: string;
-  image: string | null;
-  meta?: string;
-  icon: "ingredient" | "grocery";
-  onAdd: () => void;
-  onView: () => void;
-}) {
   return (
-    <Card className="flex h-full flex-col overflow-hidden">
-      <div className="relative h-32 w-full bg-muted">
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt={title} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-            No image
-          </div>
-        )}
-      </div>
-      <CardContent className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="line-clamp-2 font-medium">{title}</p>
-            {meta && <p className="text-xs text-muted-foreground">{meta}</p>}
-          </div>
-          <div
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full",
-              icon === "ingredient" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
-            )}
-          >
-            {icon === "ingredient" ? <ShoppingBag className="h-4 w-4" /> : <Package className="h-4 w-4" />}
-          </div>
+    <div className="relative">
+      {count > 1 && (
+        <>
+          <div className="absolute -left-2 -top-2 h-full w-full rounded-xl border bg-background/60 shadow-sm" />
+          {count > 2 && (
+            <div className="absolute -left-1 -top-1 h-full w-full rounded-xl border bg-background/70 shadow-sm" />
+          )}
+        </>
+      )}
+      <Card className="relative w-full max-w-[240px] overflow-hidden">
+        <div className="relative h-40 w-full bg-muted">
+          {stack.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={stack.imageUrl} alt={stack.itemName} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <PlaceholderIcon className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
+          {count > 1 && (
+            <span className="absolute right-2 top-2 rounded-full border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+              {count}
+            </span>
+          )}
         </div>
-        <div className="mt-auto flex items-center justify-between gap-2">
-          <Button size="sm" variant="ghost" onClick={onView}>
-            Details
-          </Button>
-          <Button size="sm" onClick={onAdd}>
-            Add to kitchen
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        <CardContent className="flex h-full flex-col gap-2 p-4">
+          <div className="space-y-1">
+            <p className="line-clamp-2 text-sm font-semibold">{stack.itemName}</p>
+            <p className="text-xs text-muted-foreground">
+              {top.quantity}
+              {top.unit ? ` ${top.unit}` : ""} · {formatExpiry(top.expiresAt)}
+            </p>
+          </div>
+          <div className="mt-auto flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={onManage} className="gap-1">
+              <Calendar className="h-4 w-4" />
+              Manage
+            </Button>
+            <Button size="sm" onClick={onConsume} className="gap-1">
+              <Utensils className="h-4 w-4" />
+              Consume
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

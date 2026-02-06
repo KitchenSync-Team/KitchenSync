@@ -3,20 +3,15 @@ import { NextResponse } from "next/server";
 
 import type { AddIngredientPayload } from "@/lib/ingredients/types";
 import { loadUserRecipeContext } from "@/lib/recipes/preferences";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuthenticatedUser, requireKitchenMembershipForUser } from "@/lib/supabase/guards";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuthenticatedUser();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
     }
+    const { user } = auth;
 
     const body = (await req.json()) as Record<string, unknown>;
     const payload = parsePayload(body);
@@ -30,87 +25,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No kitchen found for user" }, { status: 400 });
     }
 
-    const admin = createServiceRoleClient();
-
-    const { data: membership } = await admin
-      .from("kitchen_members")
-      .select("role")
-      .eq("kitchen_id", kitchenId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!membership) {
-      return NextResponse.json({ error: "You are not a member of this kitchen" }, { status: 403 });
+    const membership = await requireKitchenMembershipForUser(user, kitchenId);
+    if ("error" in membership) {
+      return NextResponse.json({ error: membership.error }, { status: 403 });
     }
+    const { admin } = membership;
 
-    const catalogType: "ingredient" | "grocery" = payload.catalogType === "grocery" ? "grocery" : "ingredient";
-
-    // Upsert catalog entry if spoonacular id present
-    let catalogId: string | null = null;
-    if (typeof payload.spoonacularId === "number" && Number.isFinite(payload.spoonacularId)) {
-      if (catalogType === "ingredient") {
-        const { data: existing, error: existingErr } = await admin
-          .from("ingredients_catalog")
-          .select("id")
-          .eq("spoonacular_id", payload.spoonacularId)
-          .maybeSingle();
-        if (existingErr) console.error("ingredients_catalog lookup error:", existingErr);
-        if (existing?.id) {
-          catalogId = existing.id;
-        } else {
-          const { data: inserted, error: insertErr } = await admin
-            .from("ingredients_catalog")
-            .insert({
-              spoonacular_id: payload.spoonacularId,
-              name: payload.name,
-              brand: payload.brand ?? null,
-              aisle: payload.aisle ?? null,
-              category: payload.category ?? null,
-              image_url: payload.imageUrl ?? null,
-              possible_units: payload.possibleUnits ?? null,
-              badges: payload.badges ?? null,
-              raw: payload.raw ?? null,
-            })
-            .select("id")
-            .maybeSingle();
-          if (insertErr) console.error("ingredients_catalog insert error:", insertErr);
-          catalogId = inserted?.id ?? null;
-        }
-      } else {
-        const { data: existing, error: existingErr } = await admin
-          .from("grocery_products")
-          .select("id")
-          .eq("spoonacular_id", payload.spoonacularId)
-          .maybeSingle();
-        if (existingErr) console.error("grocery_products lookup error:", existingErr);
-        if (existing?.id) {
-          catalogId = existing.id;
-        } else {
-          const { data: inserted, error: insertErr } = await admin
-            .from("grocery_products")
-            .insert({
-              spoonacular_id: payload.spoonacularId,
-              title: payload.name,
-              brand: payload.brand ?? null,
-              category: payload.category ?? null,
-              image_url: payload.imageUrl ?? null,
-              badges: payload.badges ?? null,
-              raw: payload.raw ?? null,
-            })
-            .select("id")
-            .maybeSingle();
-          if (insertErr) console.error("grocery_products insert error:", insertErr);
-          catalogId = inserted?.id ?? null;
-        }
-      }
-    }
-
-    const ingredientCatalogId = catalogType === "ingredient" ? catalogId : null;
-    const groceryProductId = catalogType === "grocery" ? catalogId : null;
+    // Upsert ingredient catalog entry if spoonacular id present
+    let ingredientCatalogId: string | null = null;
     const spoonacularIngredientId =
-      catalogType === "ingredient" && typeof payload.spoonacularId === "number"
+      typeof payload.spoonacularId === "number" && Number.isFinite(payload.spoonacularId)
         ? payload.spoonacularId
         : null;
+
+    if (spoonacularIngredientId !== null) {
+      const { data: existing, error: existingErr } = await admin
+        .from("ingredients_catalog")
+        .select("id")
+        .eq("spoonacular_id", spoonacularIngredientId)
+        .maybeSingle();
+      if (existingErr) console.error("ingredients_catalog lookup error:", existingErr);
+      if (existing?.id) {
+        ingredientCatalogId = existing.id;
+      } else {
+        const { data: inserted, error: insertErr } = await admin
+          .from("ingredients_catalog")
+          .insert({
+            spoonacular_id: spoonacularIngredientId,
+            name: payload.name,
+            brand: payload.brand ?? null,
+            aisle: payload.aisle ?? null,
+            category: payload.category ?? null,
+            image_url: payload.imageUrl ?? null,
+            possible_units: payload.possibleUnits ?? null,
+            badges: payload.badges ?? null,
+            raw: payload.raw ?? null,
+          })
+          .select("id")
+          .maybeSingle();
+        if (insertErr) console.error("ingredients_catalog insert error:", insertErr);
+        ingredientCatalogId = inserted?.id ?? null;
+      }
+    }
 
     // Find existing item by spoonacular id / catalog first, then name fallback
     let itemId: string | null = null;
@@ -144,19 +100,6 @@ export async function POST(req: NextRequest) {
       itemId = catalogMatch?.id ?? null;
     }
 
-    if (!itemId && groceryProductId) {
-      const { data: groMatch, error: groMatchError } = await admin
-        .from("items")
-        .select("id")
-        .eq("kitchen_id", kitchenId)
-        .eq("grocery_product_id", groceryProductId)
-        .eq("is_archived", false)
-        .maybeSingle();
-
-      if (groMatchError) console.error("Item grocery catalog match error:", groMatchError);
-      itemId = groMatch?.id ?? null;
-    }
-
     if (!itemId) {
       const { data: existingItem, error: existingError } = await admin
         .from("items")
@@ -184,7 +127,6 @@ export async function POST(req: NextRequest) {
           created_by: user.id,
           notes: payload.notes ?? null,
           ingredient_catalog_id: ingredientCatalogId,
-          grocery_product_id: groceryProductId,
           spoonacular_ingredient_id: spoonacularIngredientId,
           image_url: payload.imageUrl ?? null,
           aisle: payload.aisle ?? null,
@@ -204,7 +146,6 @@ export async function POST(req: NextRequest) {
         .from("items")
         .update({
           ingredient_catalog_id: ingredientCatalogId ?? null,
-          grocery_product_id: groceryProductId ?? null,
           spoonacular_ingredient_id: spoonacularIngredientId,
           image_url: payload.imageUrl ?? null,
           aisle: payload.aisle ?? null,
@@ -269,7 +210,6 @@ function parsePayload(body: Record<string, unknown>): AddIngredientPayload {
         : typeof body.spoonacularId === "string" && body.spoonacularId.trim()
           ? Number(body.spoonacularId)
           : undefined,
-    catalogType: body.catalogType === "grocery" ? "grocery" : "ingredient",
     imageUrl: typeof body.imageUrl === "string" ? body.imageUrl.trim() : undefined,
     aisle: typeof body.aisle === "string" ? body.aisle.trim() : undefined,
     possibleUnits: Array.isArray(body.possibleUnits)

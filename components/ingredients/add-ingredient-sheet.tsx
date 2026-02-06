@@ -27,7 +27,6 @@ export function AddIngredientSheet({
     brand?: string;
     id?: number;
     source?: string;
-    catalogType?: "ingredient" | "grocery";
     imageUrl?: string;
     aisle?: string;
     possibleUnits?: string[];
@@ -103,7 +102,6 @@ export function AddIngredientSheet({
           notes: notes.trim() || undefined,
           expiresAt: expiresAt || null,
           spoonacularId: selection.id != null ? Number(selection.id) : undefined,
-          catalogType: selection.catalogType ?? "ingredient",
           source: selection.source ?? "spoonacular",
           imageUrl: selection.imageUrl ?? undefined,
           aisle: selection.aisle ?? undefined,

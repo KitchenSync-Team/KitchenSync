@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { readRecipeCache, writeRecipeCache } from "@/lib/cache/recipe-cache";
 
 type SpoonacularIngredientInfo = {
   id?: number;
@@ -49,12 +49,7 @@ export function normalizeIngredientInfo(data: unknown, cacheKey?: string): Ingre
 }
 
 export async function readIngredientInfoCache(cacheKey: string) {
-  const admin = createServiceRoleClient();
-  return admin
-    .from("recipe_cache")
-    .select("results, expires_at")
-    .eq("cache_key", cacheKey)
-    .maybeSingle();
+  return readRecipeCache(cacheKey);
 }
 
 export function normalizeCachedIngredientInfo(
@@ -76,13 +71,7 @@ export function normalizeCachedIngredientInfo(
 }
 
 export async function writeIngredientInfoCache(cacheKey: string, payload: IngredientInfo) {
-  const admin = createServiceRoleClient();
-  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  return admin.from("recipe_cache").upsert({
-    cache_key: cacheKey,
-    results: payload,
-    expires_at: expiresAt,
-  });
+  return writeRecipeCache(cacheKey, payload);
 }
 
 function normalizeImage(image: unknown): string | null {

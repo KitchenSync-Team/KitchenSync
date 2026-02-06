@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 
 import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
+import { isRecipeCacheFresh, readRecipeCache, writeRecipeCache } from "@/lib/cache/recipe-cache";
 
 type MapRequestPayload = {
   ingredients: string[];
@@ -13,24 +14,18 @@ export async function mapIngredientsToProducts({ ingredients, servings }: MapReq
 
   const cacheKey = buildCacheKey(ingredients, servings);
 
-  const admin = createServiceRoleClient();
-
-  const { data: cached, error: cacheError } = await admin
-    .from("recipe_cache")
-    .select("results, expires_at")
-    .eq("cache_key", cacheKey)
-    .maybeSingle();
+  const { data: cached, error: cacheError } = await readRecipeCache(cacheKey);
 
   if (cacheError) {
     console.error("Map cache read error:", cacheError);
   }
 
-  if (cached?.results && cached.expires_at && new Date(cached.expires_at) > new Date()) {
+  if (cached?.results && isRecipeCacheFresh(cached.expires_at)) {
     return { results: cached.results, cached: true };
   }
 
   const url = buildSpoonacularUrl(client, "/food/ingredients/map");
-  const res = await fetch(url, {
+  const res = await spoonacularFetch(url, {
     method: "POST",
     headers: { ...client.headers, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -44,14 +39,7 @@ export async function mapIngredientsToProducts({ ingredients, servings }: MapReq
     throw new Error(`Spoonacular map error: ${res.status}`);
   }
 
-  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  const { error: insertError } = await admin
-    .from("recipe_cache")
-    .upsert({
-      cache_key: cacheKey,
-      results: raw,
-      expires_at: expiresAt,
-    });
+  const { error: insertError } = await writeRecipeCache(cacheKey, raw);
 
   if (insertError) {
     console.error("Map cache write error:", insertError);

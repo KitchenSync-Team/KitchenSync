@@ -22,7 +22,7 @@ export default function AuthLayout({
                 Your kitchen, perfectly in sync.
               </h1>
               <p className="max-w-sm text-base text-emerald-900/80 dark:text-emerald-100/80">
-                Manage your pantry, stay ahead of expirations, and coordinate grocery runs with everyone under your roof.
+                Manage your pantry, stay ahead of expirations, and coordinate shopping trips with everyone under your roof.
               </p>
             </div>
           </div>

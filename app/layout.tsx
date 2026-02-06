@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "KitchenSync",
   description:
-    "KitchenSync keeps every kitchen in sync—from pantry inventory to expiring ingredients and grocery receipts.",
+    "KitchenSync keeps every kitchen in sync—from pantry inventory to expiring ingredients and shared receipts.",
   openGraph: {
     title: "KitchenSync",
     description:

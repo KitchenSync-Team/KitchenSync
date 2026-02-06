@@ -9,13 +9,6 @@ export async function POST(req: NextRequest) {
     switch (type) {
       case "ingredient":
         return NextResponse.redirect(new URL("/api/ingredients/search", req.url), 307);
-      case "product":
-        return NextResponse.redirect(new URL("/api/groceries/search", req.url), 307);
-      case "upc":
-        if (typeof body.upc !== "string" || body.upc.trim().length === 0) {
-          return NextResponse.json({ error: "UPC is required" }, { status: 400 });
-        }
-        return NextResponse.redirect(new URL(`/api/groceries/upc/${encodeURIComponent(body.upc)}`, req.url), 307);
       case "map":
         return NextResponse.redirect(new URL("/api/ingredients/map", req.url), 307);
       default:

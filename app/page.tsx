@@ -24,7 +24,7 @@ const highlights = [
   {
     title: "Cook smarter together",
     description:
-  "Share a kitchen, track preferences, and build grocery lists that reflect everyone’s needs.",
+  "Share a kitchen, track preferences, and build shopping lists that reflect everyone’s needs.",
     icon: UtensilsCrossed,
   },
 ];

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import AddItemModal from '@/components/AddItemModal';
 
-type Item = { id: string; name: string; quantity: number; expiration_date: string | null };
+type Item = { id: string; name: string; quantity: number; expires_at: string | null };
 
 export default function DashboardPage() {
   const supabase = createClient();
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   // 2) Load reference data + items
   const loadRefs = useCallback(async () => {
     const [{ data: u }, { data: l }] = await Promise.all([
-      supabase.from('inventory_units').select('id,name').order('name'),
+      supabase.from('units').select('id,name').order('name'),
       supabase.from('locations').select('id,name').order('name'),
     ]);
     setUnits(u ?? []);
@@ -42,11 +42,22 @@ export default function DashboardPage() {
 
   const loadItems = useCallback(async (kId: string) => {
     const { data } = await supabase
-      .from('items')
-      .select('id,name,quantity,expiration_date')
+      .from('inventory')
+      .select('id,quantity,expires_at,items(name)')
       .eq('kitchen_id', kId)
-      .order('expiration_date', { ascending: true, nullsFirst: true });
-    setItems(data ?? []);
+      .order('expires_at', { ascending: true, nullsFirst: true });
+    const mapped = Array.isArray(data)
+      ? data.map((row) => {
+          const item = Array.isArray(row.items) ? row.items[0] ?? row.items : row.items;
+          return {
+            id: row.id,
+            name: item?.name ?? 'Item',
+            quantity: Number(row.quantity ?? 0),
+            expires_at: row.expires_at ?? null,
+          };
+        })
+      : [];
+    setItems(mapped);
   }, [supabase]);
 
   useEffect(() => {
@@ -77,7 +88,7 @@ export default function DashboardPage() {
             <div>
               <div className="font-medium">{it.name}</div>
               <div className="text-sm text-gray-600">
-                Qty: {it.quantity} • Exp: {it.expiration_date ?? '—'}
+                Qty: {it.quantity} • Exp: {it.expires_at ?? '—'}
               </div>
             </div>
           </li>

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeRecipeResults } from "@/lib/recipes/search";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import { createClient } from "@/lib/supabase/server";
 import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
       if (excludeTags) params.set("exclude-tags", excludeTags);
 
       const url = buildSpoonacularUrl(client, "/recipes/complexSearch", params);
-      const res = await fetch(url, { headers: client.headers });
+      const res = await spoonacularFetch(url, { headers: client.headers });
       const raw = await res.json();
 
       if (!res.ok) {
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
 
     const url = buildSpoonacularUrl(client, "/recipes/random", params);
 
-    const res = await fetch(url, { headers: client.headers });
+    const res = await spoonacularFetch(url, { headers: client.headers });
     const raw = await res.json();
 
     if (!res.ok) {

@@ -217,7 +217,6 @@ export function IngredientClient({
                 name: selected.name,
                 id: selected.id,
                 source: "spoonacular",
-                catalogType: "ingredient",
                 imageUrl: selectedDetail.image ?? selected.image ?? undefined,
                 aisle: selectedDetail.aisle ?? selected.aisle ?? undefined,
                 possibleUnits: selectedDetail.possibleUnits,

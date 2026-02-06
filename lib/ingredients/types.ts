@@ -23,7 +23,6 @@ export type AddIngredientPayload = {
   expiresAt?: string | null;
   notes?: string;
   spoonacularId?: number;
-  catalogType?: "ingredient" | "grocery";
   imageUrl?: string;
   aisle?: string;
   possibleUnits?: string[];

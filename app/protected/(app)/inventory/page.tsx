@@ -20,9 +20,10 @@ export default async function InventoryPage() {
           sort_order,
           inventory:inventory (
             id,
+            item_id,
             quantity,
             expires_at,
-            items ( name, brand ),
+            items ( id, name, brand, image_url, aisle ),
             units ( name, abbreviation )
           )
         `,
@@ -35,14 +36,6 @@ export default async function InventoryPage() {
 
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">Inventory</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Manage your kitchen inventory</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Add new items quickly and manage existing units by storage location.
-        </p>
-      </div>
-
       <InventoryClient
         kitchenId={kitchen.id}
         units={(unitsResult.data ?? []).map((unit) => ({
@@ -57,12 +50,15 @@ export default async function InventoryPage() {
           icon: loc.icon,
           inventory: Array.isArray(loc.inventory)
             ? loc.inventory.map((row) => ({
-                id: row.id,
-                quantity: Number(row.quantity ?? 0),
-                expiresAt: row.expires_at ?? null,
-                itemName: extractName(row.items),
-                unit: extractUnit(row.units),
-              }))
+              id: row.id,
+              itemId: row.item_id,
+              quantity: Number(row.quantity ?? 0),
+              expiresAt: row.expires_at ?? null,
+              itemName: extractName(row.items),
+              imageUrl: extractImage(row.items),
+              aisle: extractAisle(row.items),
+              unit: extractUnit(row.units),
+            }))
             : [],
         }))}
       />
@@ -97,4 +93,30 @@ function extractUnit(
   }
   if (!unit) return null;
   return unit.abbreviation ?? unit.name ?? null;
+}
+
+function extractImage(
+  item:
+    | { image_url?: string | null }[]
+    | { image_url?: string | null }
+    | null
+    | undefined,
+): string | null {
+  if (Array.isArray(item)) {
+    return item[0]?.image_url ?? null;
+  }
+  return item?.image_url ?? null;
+}
+
+function extractAisle(
+  item:
+    | { aisle?: string | null }[]
+    | { aisle?: string | null }
+    | null
+    | undefined,
+): string | null {
+  if (Array.isArray(item)) {
+    return item[0]?.aisle ?? null;
+  }
+  return item?.aisle ?? null;
 }

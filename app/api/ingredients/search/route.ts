@@ -10,6 +10,8 @@ import {
 } from "@/lib/ingredients/search";
 import type { IngredientSearchResponse } from "@/lib/ingredients/types";
 import { loadUserRecipeContext } from "@/lib/recipes/preferences";
+import { isRecipeCacheFresh } from "@/lib/cache/recipe-cache";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import { createClient } from "@/lib/supabase/server";
 import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
@@ -59,12 +61,12 @@ export async function POST(req: NextRequest) {
       console.error("Ingredient cache read error", cacheError);
     }
 
-    if (cacheHit?.results && cacheHit.expires_at && new Date(cacheHit.expires_at) > new Date()) {
+    if (cacheHit?.results && isRecipeCacheFresh(cacheHit.expires_at)) {
       const cachedPayload = normalizeCachedIngredients(cacheHit.results, intolerances, cacheKey);
       return NextResponse.json(cachedPayload);
     }
 
-    const apiRes = await fetch(url, { headers });
+    const apiRes = await spoonacularFetch(url, { headers });
     const raw = await apiRes.json();
 
     if (!apiRes.ok) {

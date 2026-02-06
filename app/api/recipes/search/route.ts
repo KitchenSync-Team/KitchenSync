@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 import { buildRecipeSearch, normalizeRecipeResults } from "@/lib/recipes/search";
 import type { RecipeSearchPayload, RecipeSearchResponse } from "@/lib/recipes/types";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { isRecipeCacheFresh, readRecipeCache, writeRecipeCache } from "@/lib/cache/recipe-cache";
+import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import { createClient } from "@/lib/supabase/server";
 import { getSpoonacularClient } from "@/lib/spoonacular/client";
 
@@ -75,30 +76,18 @@ export async function POST(req: NextRequest) {
 
     const { endpoint, url, cacheKey, applied, headers } = searchConfig;
 
-    const admin = createServiceRoleClient();
-
-    const { data: cacheHit, error: cacheError } = await admin
-      .from("recipe_cache")
-      .select("results, expires_at")
-      .eq("cache_key", cacheKey)
-      .maybeSingle();
+    const { data: cacheHit, error: cacheError } = await readRecipeCache(cacheKey);
 
     if (cacheError) {
       console.error("Cache read error:", cacheError);
     }
 
-    const now = new Date();
-    if (
-      cacheHit &&
-      cacheHit.expires_at &&
-      new Date(cacheHit.expires_at) > now &&
-      cacheHit.results
-    ) {
+    if (cacheHit && cacheHit.results && isRecipeCacheFresh(cacheHit.expires_at)) {
       const cachedPayload = normalizeCachedPayload(cacheHit.results, applied, endpoint, cacheKey);
       return NextResponse.json({ ...cachedPayload, cached: true });
     }
 
-    const apiRes = await fetch(url, { headers });
+    const apiRes = await spoonacularFetch(url, { headers });
     const rawData = await apiRes.json();
 
     if (!apiRes.ok) {
@@ -119,15 +108,7 @@ export async function POST(req: NextRequest) {
       cacheKey,
     };
 
-    const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-
-    const { error: insertError } = await admin
-      .from("recipe_cache")
-      .upsert({
-        cache_key: cacheKey,
-        results: responseBody,
-        expires_at: expiresAt,
-      });
+    const { error: insertError } = await writeRecipeCache(cacheKey, responseBody);
 
     if (insertError) {
       console.error("Cache insert error:", insertError);
