@@ -30,6 +30,7 @@ export default async function KitchenSettingsPage() {
         memberCount={memberCount}
         defaultOptions={defaultOptions}
         initialCustomLocations={initialCustomLocations}
+        locations={locations}
         members={members ?? []}
         pendingInvites={pendingInvites}
         currentUserId={user.id}

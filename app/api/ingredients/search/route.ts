@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Record<string, unknown>;
     const query = typeof body.query === "string" ? body.query.trim() : "";
     const number = typeof body.number === "number" ? body.number : undefined;
+    const offset = typeof body.offset === "number" ? body.offset : undefined;
 
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       query,
       client,
       limit: number,
+      offset,
       intolerances,
     });
 

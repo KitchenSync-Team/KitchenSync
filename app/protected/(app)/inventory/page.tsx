@@ -1,4 +1,5 @@
 import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
+import { formatInventoryItemName } from "@/lib/formatting/inventory";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 import { InventoryClient } from "./inventory-client";
@@ -23,7 +24,7 @@ export default async function InventoryPage() {
             item_id,
             quantity,
             expires_at,
-            items ( id, name, brand, image_url, aisle ),
+            items ( id, name, brand, image_url, aisle, ingredient_catalog_id, spoonacular_ingredient_id, ingredients_catalog ( possible_units ) ),
             units ( name, abbreviation )
           )
         `,
@@ -54,7 +55,8 @@ export default async function InventoryPage() {
               itemId: row.item_id,
               quantity: Number(row.quantity ?? 0),
               expiresAt: row.expires_at ?? null,
-              itemName: extractName(row.items),
+              itemName: formatInventoryItemName(extractName(row.items)),
+              possibleUnits: extractPossibleUnits(row.items),
               imageUrl: extractImage(row.items),
               aisle: extractAisle(row.items),
               unit: extractUnit(row.units),
@@ -119,4 +121,19 @@ function extractAisle(
     return item[0]?.aisle ?? null;
   }
   return item?.aisle ?? null;
+}
+
+function extractPossibleUnits(
+  item:
+    | { ingredients_catalog?: { possible_units?: string[] | null } | { possible_units?: string[] | null }[] }[]
+    | { ingredients_catalog?: { possible_units?: string[] | null } | { possible_units?: string[] | null }[] }
+    | null
+    | undefined,
+): string[] | null {
+  if (!item) return null;
+  const entry = Array.isArray(item) ? item[0] : item;
+  if (!entry || !entry.ingredients_catalog) return null;
+  const catalog = Array.isArray(entry.ingredients_catalog) ? entry.ingredients_catalog[0] : entry.ingredients_catalog;
+  if (!catalog || !Array.isArray(catalog.possible_units)) return null;
+  return catalog.possible_units;
 }

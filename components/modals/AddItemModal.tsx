@@ -92,8 +92,8 @@ export default function AddItemModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Add Item</h2>
-          <button onClick={onCloseAction} className="rounded px-2 py-1">✕</button>
+          <h2 className="text-xl font-semibold">Add item</h2>
+          <button onClick={onCloseAction} className="rounded px-2 py-1">X</button>
         </div>
 
         <form onSubmit={handleSubmit} className="grid gap-3">
@@ -127,7 +127,7 @@ export default function AddItemModal({
                 value={form.unit_id}
                 onChange={e => update('unit_id', e.target.value)}
               >
-                <option value="">—</option>
+                <option value="">No unit</option>
                 {units.map(u => (
                   <option key={u.id} value={String(u.id)}>
                     {u.name}
@@ -144,7 +144,7 @@ export default function AddItemModal({
               value={form.location_id}
               onChange={e => update('location_id', e.target.value)}
             >
-              <option value="">—</option>
+              <option value="">Select location</option>
               {locations.map(l => (
                 <option key={l.id} value={String(l.id)}>
                   {l.name}
@@ -181,10 +181,11 @@ export default function AddItemModal({
             type="submit"
             disabled={loading}
           >
-            {loading ? 'Adding…' : 'Add Item'}
+            {loading ? 'Adding...' : 'Add item'}
           </button>
         </form>
       </div>
     </div>
   );
 }
+

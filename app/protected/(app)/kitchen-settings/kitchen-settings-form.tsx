@@ -1,12 +1,23 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 
 import { LocationPlanner } from "@/components/onboarding/location-planner";
 import { MembersCard } from "@/components/kitchen-settings/members-card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -34,11 +45,12 @@ import {
   type KitchenIconId,
 } from "@/components/navigation/kitchen-icons";
 
-import type {
-  CustomPlannerLocation,
-  DefaultLocationOption,
+import {
+  normalizeLocationName,
+  type CustomPlannerLocation,
+  type DefaultLocationOption,
 } from "@/app/protected/_lib/location-presets";
-import type { KitchenInviteSummary, KitchenMember } from "@/lib/domain/kitchen";
+import type { KitchenInviteSummary, KitchenMember, LocationSummary } from "@/lib/domain/kitchen";
 import { renameKitchen, updateKitchenSettings } from "./actions";
 import type { KitchenSettingsActionState } from "./action-state";
 import { defaultKitchenSettingsState } from "./action-state";
@@ -50,6 +62,7 @@ type KitchenSettingsFormProps = {
   memberCount: number | null;
   defaultOptions: DefaultLocationOption[];
   initialCustomLocations: CustomPlannerLocation[];
+  locations: LocationSummary[];
   members: KitchenMember[];
   pendingInvites: KitchenInviteSummary[];
   currentUserId: string;
@@ -137,6 +150,7 @@ export function KitchenSettingsForm({
   memberCount,
   defaultOptions,
   initialCustomLocations,
+  locations,
   members,
   pendingInvites,
   currentUserId,
@@ -157,6 +171,7 @@ export function KitchenSettingsForm({
           kitchenId={kitchenId}
           defaultOptions={defaultOptions}
           initialCustomLocations={initialCustomLocations}
+          locations={locations}
         />
       </div>
       <div className="space-y-8">
@@ -387,15 +402,18 @@ function StorageLocationsCard({
   kitchenId,
   defaultOptions,
   initialCustomLocations,
+  locations,
 }: {
   kitchenId: string;
   defaultOptions: DefaultLocationOption[];
   initialCustomLocations: CustomPlannerLocation[];
+  locations: LocationSummary[];
 }) {
   const [state, formAction] = useActionState<KitchenSettingsActionState, FormData>(
     updateKitchenSettings,
     defaultKitchenSettingsState,
   );
+  const [isSavingLocations, startSavingLocations] = useTransition();
   const [plannerDefaults, setPlannerDefaults] = useState(defaultOptions);
   const [plannerCustomLocations, setPlannerCustomLocations] = useState(initialCustomLocations);
   const [resetSignal, setResetSignal] = useState(0);
@@ -404,10 +422,13 @@ function StorageLocationsCard({
   const [baselineSummary, setBaselineSummary] = useState<LocationSummary>(initialSummary);
   const [currentHash, setCurrentHash] = useState<string | null>(null);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [confirmRemovalOpen, setConfirmRemovalOpen] = useState(false);
+  const [removedLocations, setRemovedLocations] = useState<string[]>([]);
   const baselineSelectionsRef = useRef<PlannerSelection[] | null>(null);
   const latestSelectionsRef = useRef<PlannerSelection[]>([]);
   const expectingBaselineRef = useRef(true);
   const lastHandledStatus = useRef<"idle" | "success" | "error">("idle");
+  const pendingFormDataRef = useRef<FormData | null>(null);
 
   useEffect(() => {
     setPlannerDefaults(defaultOptions);
@@ -468,6 +489,9 @@ function StorageLocationsCard({
       if (currentHash) {
         setLastSavedHash(currentHash);
       }
+      setConfirmRemovalOpen(false);
+      pendingFormDataRef.current = null;
+      setRemovedLocations([]);
     } else if (state.status === "error" && lastHandledStatus.current !== "error") {
       toast.error("Couldn’t save locations", {
         description: state.error ?? "Try again shortly.",
@@ -479,6 +503,77 @@ function StorageLocationsCard({
   const hasSnapshot = Boolean(currentHash && lastSavedHash);
   const disableSubmit = locationSummary.total === 0 || !hasSnapshot || currentHash === lastSavedHash;
   const disableReset = !hasSnapshot || currentHash === lastSavedHash;
+  const locationUnitCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const location of locations) {
+      map.set(normalizeLocationName(location.name), location.totalUnits ?? 0);
+    }
+    return map;
+  }, [locations]);
+
+  const computeRemovedLocations = useCallback(() => {
+    const baseline = baselineSelectionsRef.current ?? [];
+    const latest = latestSelectionsRef.current;
+    const latestKeys = new Set(latest.map((selection) => selection.name.trim().toLowerCase()));
+    return baseline
+      .filter((selection) => !latestKeys.has(selection.name.trim().toLowerCase()))
+      .map((selection) => selection.name);
+  }, []);
+
+  const handleSubmitLocations = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (disableSubmit) {
+        return;
+      }
+
+      const removed = computeRemovedLocations();
+      const removedWithInventory = removed.filter(
+        (name) => (locationUnitCounts.get(normalizeLocationName(name)) ?? 0) > 0,
+      );
+      const formData = new FormData(event.currentTarget);
+
+      if (removedWithInventory.length > 0) {
+        pendingFormDataRef.current = formData;
+        setRemovedLocations(removedWithInventory);
+        setConfirmRemovalOpen(true);
+        return;
+      }
+
+      startSavingLocations(() => {
+        formAction(formData);
+      });
+    },
+    [computeRemovedLocations, disableSubmit, formAction, locationUnitCounts],
+  );
+
+  const handleConfirmRemoval = useCallback(() => {
+    if (!pendingFormDataRef.current) {
+      setConfirmRemovalOpen(false);
+      return;
+    }
+    const pending = pendingFormDataRef.current;
+    if (pending) {
+      startSavingLocations(() => {
+        formAction(pending);
+      });
+    }
+    pendingFormDataRef.current = null;
+    setRemovedLocations([]);
+    setConfirmRemovalOpen(false);
+  }, [formAction]);
+
+  const handleCancelRemoval = useCallback(() => {
+    pendingFormDataRef.current = null;
+    setRemovedLocations([]);
+    setConfirmRemovalOpen(false);
+    if (!baselineSelectionsRef.current || !lastSavedHash) {
+      return;
+    }
+    applySelectionsToPlanner(baselineSelectionsRef.current);
+    setLocationSummary(baselineSummary);
+    setCurrentHash(lastSavedHash);
+  }, [applySelectionsToPlanner, baselineSummary, lastSavedHash]);
 
   const handleResetLocations = useCallback(() => {
     if (!baselineSelectionsRef.current || !lastSavedHash) {
@@ -496,7 +591,7 @@ function StorageLocationsCard({
         locationSummary.total === 0 && "border-red-400 dark:border-red-500",
       )}
     >
-      <form action={formAction}>
+      <form action={formAction} onSubmit={handleSubmitLocations}>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <CardTitle>Storage locations</CardTitle>
@@ -535,6 +630,57 @@ function StorageLocationsCard({
           </div>
         </CardFooter>
       </form>
+      <AlertDialog
+        open={confirmRemovalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            pendingFormDataRef.current = null;
+            setRemovedLocations([]);
+          }
+          setConfirmRemovalOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove locations?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removing a location will permanently delete all inventory stored there. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {removedLocations.length > 0 ? (
+            <div className="mt-2 space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">
+                Locations with inventory
+              </p>
+              <div className="space-y-2">
+                {removedLocations.map((name) => {
+                  const count = locationUnitCounts.get(normalizeLocationName(name)) ?? 0;
+                  return (
+                    <div key={name} className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{name}</span>
+                      <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-semibold">
+                        {count} item{count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelRemoval} disabled={isSavingLocations}>
+              Keep locations
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRemoval}
+              disabled={isSavingLocations}
+              className="bg-red-600 hover:bg-red-500"
+            >
+              Remove locations
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

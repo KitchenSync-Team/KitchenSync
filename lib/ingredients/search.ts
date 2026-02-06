@@ -13,17 +13,20 @@ type SpoonacularIngredientSearch = {
 export async function searchIngredients({
   query,
   limit = 12,
+  offset = 0,
   intolerances = [],
   client,
 }: {
   query: string;
   limit?: number;
+  offset?: number;
   intolerances?: string[];
   client: SpoonacularClient;
 }): Promise<{ url: string; cacheKey: string; headers: Record<string, string> }> {
   const params = new URLSearchParams();
   params.set("query", query);
   params.set("number", String(clamp(limit, 1, 25)));
+  params.set("offset", String(Math.max(0, offset)));
   params.set("addChildren", "true");
 
   if (intolerances.length > 0) {
@@ -31,7 +34,7 @@ export async function searchIngredients({
   }
 
   const url = buildSpoonacularUrl(client, "/food/ingredients/search", params);
-  const rawCacheKey = JSON.stringify({ query, limit, intolerances });
+  const rawCacheKey = JSON.stringify({ query, limit, offset, intolerances });
   const cacheKey = `ingredients:${hashKey(rawCacheKey)}`;
 
   return { url, cacheKey, headers: client.headers };
@@ -80,8 +83,21 @@ export function normalizeCachedIngredients(
     };
   }
   const payload = cached as Partial<IngredientSearchResponse>;
+  const rows = Array.isArray(payload.results) ? payload.results : [];
+  const results: IngredientSearchResult[] = rows
+    .map((row) => {
+      const entry = row as Partial<IngredientSearchResult>;
+      if (typeof entry.id !== "number" || !entry.name) return null;
+      return {
+        id: entry.id,
+        name: entry.name,
+        image: normalizeImage(entry.image),
+        aisle: entry.aisle ?? null,
+      };
+    })
+    .filter((row): row is IngredientSearchResult => Boolean(row));
   return {
-    results: Array.isArray(payload.results) ? payload.results : [],
+    results,
     totalResults: typeof payload.totalResults === "number" ? payload.totalResults : 0,
     cached: true,
     appliedIntolerances: appliedIntolerances ?? payload.appliedIntolerances ?? [],
@@ -95,6 +111,7 @@ export async function writeIngredientCache(cacheKey: string, payload: Ingredient
 
 function normalizeImage(image: unknown): string | null {
   if (typeof image !== "string" || image.length === 0) return null;
+  if (image === "no.jpg") return null;
   if (image.startsWith("http")) return image;
   return `https://img.spoonacular.com/ingredients_250x250/${image}`;
 }

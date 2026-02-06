@@ -74,9 +74,9 @@ export default function AddItemModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Add Item</h2>
+          <h2 className="text-xl font-semibold">Add item</h2>
           <button onClick={onCloseAction} className="rounded px-2 py-1">
-            ✕
+            X
           </button>
         </div>
 
@@ -95,7 +95,7 @@ export default function AddItemModal({
             <label className="grid gap-1">
               <span className="text-sm">Unit</span>
               <select className="rounded border p-2" value={String(form.unit_id)} onChange={(e) => update("unit_id", e.target.value)}>
-                <option value="">—</option>
+                <option value="">No unit</option>
                 {units.map((u) => (
                   <option key={String(u.id)} value={String(u.id)}>
                     {u.name}
@@ -108,7 +108,7 @@ export default function AddItemModal({
           <label className="grid gap-1">
             <span className="text-sm">Location</span>
             <select className="rounded border p-2" value={String(form.location_id)} onChange={(e) => update("location_id", e.target.value)}>
-              <option value="">—</option>
+              <option value="">Select location</option>
               {locations.map((l) => (
                 <option key={String(l.id)} value={String(l.id)}>
                   {l.name}
@@ -130,10 +130,11 @@ export default function AddItemModal({
           {err && <p className="text-sm text-red-600">{err}</p>}
 
           <button className="mt-2 rounded-xl border bg-black px-4 py-2 text-white disabled:opacity-60" type="submit" disabled={loading}>
-            {loading ? "Adding…" : "Add Item"}
+            {loading ? "Adding..." : "Add item"}
           </button>
         </form>
       </div>
     </div>
   );
 }
+

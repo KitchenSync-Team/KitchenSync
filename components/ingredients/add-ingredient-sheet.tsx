@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { formatInventoryItemName } from "@/lib/formatting/inventory";
+import { filterUnitsByPossible } from "@/lib/units/filters";
 
 type LocationOption = { id: string; name: string; icon?: string | null };
 type UnitOption = { id: string; name: string; abbreviation?: string | null; type: string };
@@ -46,8 +48,11 @@ export function AddIngredientSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const title = selection?.name ?? "Add ingredient";
-  const displayUnits = useMemo(() => units.filter((unit) => unit.type !== "time"), [units]);
+  const formattedName = selection ? formatInventoryItemName(selection.name) : "Add item";
+  const displayUnits = useMemo(
+    () => filterUnitsByPossible(units, suggestedUnits),
+    [units, suggestedUnits],
+  );
   const suggestedUnitIds = useMemo(() => {
     if (!suggestedUnits || suggestedUnits.length === 0) return [];
     const lowered = suggestedUnits.map((value) => value.toLowerCase());
@@ -83,7 +88,7 @@ export function AddIngredientSheet({
     if (!selection) return;
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) {
-      setError("Enter a valid quantity");
+      setError("Enter a valid quantity.");
       return;
     }
     setSaving(true);
@@ -94,7 +99,7 @@ export function AddIngredientSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kitchenId,
-          name: selection.name,
+          name: formatInventoryItemName(selection.name),
           brand: brand.trim() || undefined,
           quantity: qty,
           unitId: unitId || null,
@@ -115,7 +120,7 @@ export function AddIngredientSheet({
             ? data.error
             : typeof data.detail === "string"
               ? data.detail
-              : "Could not add item";
+              : "Could not add item.";
         setError(message);
         return;
       }
@@ -123,11 +128,11 @@ export function AddIngredientSheet({
         displayUnits.find((unit) => unit.id === unitId)?.abbreviation ??
         displayUnits.find((unit) => unit.id === unitId)?.name ??
         null;
-      onSuccess({ name: selection.name, quantity: qty, locationId, unitLabel });
+      onSuccess({ name: formatInventoryItemName(selection.name), quantity: qty, locationId, unitLabel });
       onOpenChange(false);
       reset();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not add item";
+      const message = err instanceof Error ? err.message : "Could not add item.";
       setError(message);
     } finally {
       setSaving(false);
@@ -138,13 +143,15 @@ export function AddIngredientSheet({
     <Sheet open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) reset(); }}>
       <SheetContent className="sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Add to kitchen</SheetTitle>
-          <p className="text-sm text-muted-foreground">Save {title} to a storage location with quantity and unit.</p>
+          <SheetTitle>Add item</SheetTitle>
+          <p className="text-sm text-muted-foreground">
+            Save {formattedName} to a storage location with quantity and unit.
+          </p>
         </SheetHeader>
         <div className="mt-4 space-y-4">
           <div className="space-y-2">
             <Label>Name</Label>
-            <Input value={title} readOnly />
+            <Input value={formattedName} readOnly />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
@@ -194,7 +201,7 @@ export function AddIngredientSheet({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="expires-at">Expires on (optional)</Label>
+              <Label htmlFor="expires-at">Expiration date (optional)</Label>
               <Input
                 id="expires-at"
                 type="date"
@@ -226,7 +233,7 @@ export function AddIngredientSheet({
           </Button>
           <Button onClick={handleSave} disabled={saving} className="gap-2">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Add to kitchen
+            Add item
           </Button>
         </SheetFooter>
       </SheetContent>

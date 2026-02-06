@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import AddItemModal from '@/components/AddItemModal';
+import { formatInventoryExpiry, formatInventoryItemName } from '@/lib/formatting/inventory';
 
 type Item = { id: string; name: string; quantity: number; expires_at: string | null };
 
@@ -51,7 +52,7 @@ export default function DashboardPage() {
           const item = Array.isArray(row.items) ? row.items[0] ?? row.items : row.items;
           return {
             id: row.id,
-            name: item?.name ?? 'Item',
+            name: formatInventoryItemName(item?.name ?? 'Item'),
             quantity: Number(row.quantity ?? 0),
             expires_at: row.expires_at ?? null,
           };
@@ -78,7 +79,7 @@ export default function DashboardPage() {
           className="rounded-xl bg-black px-4 py-2 text-white"
           disabled={!kitchenId}
         >
-          + Add Item
+          Add item
         </button>
       </div>
 
@@ -88,7 +89,7 @@ export default function DashboardPage() {
             <div>
               <div className="font-medium">{it.name}</div>
               <div className="text-sm text-gray-600">
-                Qty: {it.quantity} • Exp: {it.expires_at ?? '—'}
+                Qty: {it.quantity} - Expires: {formatInventoryExpiry(it.expires_at)}
               </div>
             </div>
           </li>

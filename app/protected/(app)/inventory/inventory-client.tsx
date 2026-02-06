@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, addMonths, format, isValid, parseISO } from "date-fns";
 import {
   Calendar as CalendarIcon,
   ChevronDown,
-  ChevronUp,
   Loader2,
-  Package,
   Plus,
   Search,
   Utensils,
@@ -22,7 +20,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatInventoryExpiry, formatInventoryItemName, formatQuantityWithUnit, formatUnitLabel } from "@/lib/formatting/inventory";
+import { getIngredientFallbackIcon } from "@/lib/ingredients/icon";
 import { cn } from "@/lib/supabase/utils";
+import { filterImperialUnits, filterUnitsByPossible } from "@/lib/units/filters";
 
 type UnitOption = { id: string; name: string; abbreviation?: string | null; type: string };
 
@@ -35,6 +36,7 @@ type InventoryEntry = {
   quantity: number;
   unit: string | null;
   expiresAt: string | null;
+  possibleUnits?: string[] | null;
 };
 
 type LocationBucket = {
@@ -73,11 +75,18 @@ export function InventoryClient({
   const [addQuery, setAddQuery] = useState("");
   const [addResults, setAddResults] = useState<IngredientResult[]>([]);
   const [addLoading, setAddLoading] = useState(false);
+  const [addLoadingMore, setAddLoadingMore] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSelection, setAddSelection] = useState<IngredientResult | null>(null);
+  const [addTotalResults, setAddTotalResults] = useState(0);
   const [addQuantity, setAddQuantity] = useState("1");
   const [addUnitId, setAddUnitId] = useState<string | null>(null);
   const [addExpiresAt, setAddExpiresAt] = useState("");
+  const [addExpiresAtInput, setAddExpiresAtInput] = useState("");
+  const [addCalendarOpen, setAddCalendarOpen] = useState(false);
+  const [addCalendarMonth, setAddCalendarMonth] = useState<Date | undefined>(undefined);
+  const [addCalendarDirection, setAddCalendarDirection] = useState<"next" | "prev">("next");
+  const [addCalendarAnimKey, setAddCalendarAnimKey] = useState(0);
   const [addLocationId, setAddLocationId] = useState<string | null>(locations[0]?.id ?? null);
   const [addSaving, setAddSaving] = useState(false);
   const [addSuggestedUnits, setAddSuggestedUnits] = useState<string[]>([]);
@@ -105,12 +114,48 @@ export function InventoryClient({
   const [consumeError, setConsumeError] = useState<string | null>(null);
   const [consumeConfirm, setConsumeConfirm] = useState<string | null>(null);
 
-  const displayUnits = useMemo(() => units.filter((unit) => unit.type !== "time"), [units]);
+  const allLocationIds = useMemo(() => buckets.map((loc) => loc.id), [buckets]);
+  const allExpanded = useMemo(
+    () => allLocationIds.every((id) => openLocations[id] ?? true),
+    [allLocationIds, openLocations],
+  );
+  const allCollapsed = useMemo(
+    () => allLocationIds.every((id) => (openLocations[id] ?? true) === false),
+    [allLocationIds, openLocations],
+  );
+
+  const setAllLocationsOpen = useCallback(
+    (open: boolean) => {
+      setOpenLocations(Object.fromEntries(allLocationIds.map((id) => [id, open])));
+    },
+    [allLocationIds],
+  );
+
+  const displayUnits = useMemo(() => filterImperialUnits(units), [units]);
+  const addUnitOptions = useMemo(
+    () => filterUnitsByPossible(displayUnits, addSuggestedUnits),
+    [displayUnits, addSuggestedUnits],
+  );
+  const manageUnitOptions = useMemo(
+    () => filterUnitsByPossible(displayUnits, manageTarget?.possibleUnits ?? null),
+    [displayUnits, manageTarget?.possibleUnits],
+  );
+  const addQuantityValue = Number(addQuantity);
+  const addUnitQuantity = Number.isFinite(addQuantityValue) && addQuantityValue > 0 ? addQuantityValue : 1;
+  const manageQuantityValue = Number.parseInt(manageQuantity, 10);
+  const manageUnitQuantity = Number.isFinite(manageQuantityValue) && manageQuantityValue > 0 ? manageQuantityValue : 1;
+  const consumeQuantityValue = Number.parseInt(consumeAmount, 10);
+  const consumeUnitQuantity = Number.isFinite(consumeQuantityValue) && consumeQuantityValue > 0 ? consumeQuantityValue : 1;
   const manageSelectedDate = useMemo(() => {
     if (!manageExpiresAt) return undefined;
     const parsed = parseISO(manageExpiresAt);
     return isValid(parsed) ? parsed : undefined;
   }, [manageExpiresAt]);
+  const addSelectedDate = useMemo(() => {
+    if (!addExpiresAt) return undefined;
+    const parsed = parseISO(addExpiresAt);
+    return isValid(parsed) ? parsed : undefined;
+  }, [addExpiresAt]);
   const consumeSelectedEntry = useMemo(() => {
     if (!consumeStack) return null;
     return consumeStack.entries.find((item) => item.id === consumeEntryId) ?? consumeStack.entries[0] ?? null;
@@ -121,6 +166,14 @@ export function InventoryClient({
       setManageCalendarMonth(new Date(manageSelectedDate.getFullYear(), manageSelectedDate.getMonth(), 1));
     }
   }, [manageSelectedDate]);
+  useEffect(() => {
+    if (addSelectedDate) {
+      setAddCalendarMonth(new Date(addSelectedDate.getFullYear(), addSelectedDate.getMonth(), 1));
+    }
+    if (addSelectedDate && !addExpiresAtInput) {
+      setAddExpiresAtInput(format(addSelectedDate, "MM/dd/yyyy"));
+    }
+  }, [addSelectedDate]);
   useEffect(() => {
     if (!consumeSelectedEntry) return;
     const parsed = Number.parseInt(consumeAmount, 10);
@@ -173,17 +226,7 @@ export function InventoryClient({
   }
 
   function formatExpiry(value: string | null) {
-    if (!value) return "No expiration";
-    return value;
-  }
-
-  function getPlaceholderIcon(aisle: string | null) {
-    if (!aisle) return Package;
-    const lower = aisle.toLowerCase();
-    if (lower.includes("dairy") || lower.includes("egg")) return Utensils;
-    if (lower.includes("meat") || lower.includes("seafood")) return Utensils;
-    if (lower.includes("produce") || lower.includes("vegetable") || lower.includes("fruit")) return Utensils;
-    return Package;
+    return formatInventoryExpiry(value);
   }
 
   async function runAddSearch() {
@@ -197,7 +240,7 @@ export function InventoryClient({
       const res = await fetch("/api/ingredients/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: addQuery.trim() }),
+        body: JSON.stringify({ query: addQuery.trim(), number: 12, offset: 0 }),
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
@@ -212,11 +255,44 @@ export function InventoryClient({
       }
       const results = Array.isArray(data.results) ? (data.results as IngredientResult[]) : [];
       setAddResults(results);
+      setAddTotalResults(typeof data.totalResults === "number" ? data.totalResults : results.length);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Search failed";
       setAddError(message);
     } finally {
       setAddLoading(false);
+    }
+  }
+
+  async function loadMoreResults() {
+    if (addLoadingMore || addLoading) return;
+    if (!addQuery.trim()) return;
+    if (addResults.length >= addTotalResults) return;
+    setAddLoadingMore(true);
+    try {
+      const res = await fetch("/api/ingredients/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: addQuery.trim(),
+          number: 12,
+          offset: addResults.length,
+        }),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) return;
+      const results = Array.isArray(data.results) ? (data.results as IngredientResult[]) : [];
+      if (results.length === 0) return;
+      setAddResults((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        const next = results.filter((item) => !seen.has(item.id));
+        return [...current, ...next];
+      });
+      if (typeof data.totalResults === "number") {
+        setAddTotalResults(data.totalResults);
+      }
+    } finally {
+      setAddLoadingMore(false);
     }
   }
 
@@ -239,7 +315,8 @@ export function InventoryClient({
 
   function resolveSuggestedUnitId(possible: string[]) {
     const lowered = possible.map((value) => value.toLowerCase());
-    const match = displayUnits.find(
+    const allowedUnits = filterUnitsByPossible(displayUnits, possible);
+    const match = allowedUnits.find(
       (unit) =>
         (unit.name && lowered.includes(unit.name.toLowerCase())) ||
         (unit.abbreviation && lowered.includes(unit.abbreviation.toLowerCase())),
@@ -251,10 +328,16 @@ export function InventoryClient({
     setAddStep("search");
     setAddQuery("");
     setAddResults([]);
+    setAddTotalResults(0);
     setAddSelection(null);
     setAddQuantity("1");
     setAddUnitId(null);
     setAddExpiresAt("");
+    setAddExpiresAtInput("");
+    setAddCalendarOpen(false);
+    setAddCalendarMonth(undefined);
+    setAddCalendarDirection("next");
+    setAddCalendarAnimKey(0);
     setAddError(null);
     setAddSuggestedUnits([]);
   }
@@ -279,7 +362,7 @@ export function InventoryClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kitchenId,
-          name: addSelection.name,
+          name: formatInventoryItemName(addSelection.name),
           quantity: qty,
           unitId: addUnitId || null,
           locationId: addLocationId,
@@ -297,7 +380,7 @@ export function InventoryClient({
             ? data.error
             : typeof data.detail === "string"
               ? data.detail
-              : "Could not add item";
+              : "Could not add item.";
         setAddError(message);
         return;
       }
@@ -313,7 +396,7 @@ export function InventoryClient({
                   {
                     id: inventoryId,
                     itemId: String(data.itemId ?? addSelection.id),
-                    itemName: addSelection.name,
+                    itemName: formatInventoryItemName(addSelection.name),
                     imageUrl: addSelection.image ?? null,
                     aisle: addSelection.aisle ?? null,
                     quantity: qty,
@@ -322,6 +405,7 @@ export function InventoryClient({
                       displayUnits.find((unit) => unit.id === addUnitId)?.name ??
                       null,
                     expiresAt: addExpiresAt || null,
+                    possibleUnits: addSuggestedUnits.length > 0 ? addSuggestedUnits : null,
                   },
                   ...loc.inventory,
                 ],
@@ -333,7 +417,7 @@ export function InventoryClient({
       setAddOpen(false);
       resetAddState();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not add item";
+      const message = err instanceof Error ? err.message : "Could not add item.";
       setAddError(message);
     } finally {
       setAddSaving(false);
@@ -461,15 +545,15 @@ export function InventoryClient({
     const entry = consumeStack.entries.find((e) => e.id === consumeEntryId);
     if (!entry) return;
     if (qty > entry.quantity) {
-      setConsumeError(`You only have ${entry.quantity} ${entry.unit ?? ""} available.`);
+      setConsumeError(`You only have ${formatQuantityWithUnit(entry.quantity, entry.unit)} available.`);
       return;
     }
 
     const remaining = entry.quantity - qty;
     const confirmMessage =
       remaining <= 0
-        ? `This will consume all ${entry.quantity} ${entry.unit ?? ""} and remove the item.`
-        : `This will use ${qty} ${entry.unit ?? ""} and leave ${remaining} ${entry.unit ?? ""}.`;
+        ? `This will consume all ${formatQuantityWithUnit(entry.quantity, entry.unit)} and remove the item.`
+        : `This will use ${formatQuantityWithUnit(qty, entry.unit)} and leave ${formatQuantityWithUnit(remaining, entry.unit)}.`;
     if (!consumeConfirm) {
       setConsumeConfirm(confirmMessage);
       return;
@@ -518,6 +602,7 @@ export function InventoryClient({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Add item modal */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Inventory</p>
@@ -526,10 +611,32 @@ export function InventoryClient({
             Organize ingredients by location, track quantities, and stay ahead of expirations.
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="gap-2 self-start sm:self-auto">
-          <Plus className="h-4 w-4" />
-          Add item
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAllLocationsOpen(true)}
+            disabled={allExpanded}
+            className="gap-1"
+          >
+            <ChevronDown className="h-4 w-4 rotate-180" />
+            Expand all
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAllLocationsOpen(false)}
+            disabled={allCollapsed}
+            className="gap-1"
+          >
+            <ChevronDown className="h-4 w-4" />
+            Collapse all
+          </Button>
+          <Button onClick={() => setAddOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add item
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -566,7 +673,6 @@ export function InventoryClient({
                         stack={stack}
                         onManage={() => openManage(stack)}
                         onConsume={() => openConsume(stack)}
-                        getPlaceholderIcon={getPlaceholderIcon}
                         formatExpiry={formatExpiry}
                       />
                     ))
@@ -585,11 +691,32 @@ export function InventoryClient({
           if (!open) resetAddState();
         }}
       >
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent
+          className={cn(
+            "flex flex-col",
+            addStep === "details"
+              ? "sm:max-w-sm"
+              : addResults.length === 0 && !addLoading
+                ? "sm:max-w-md"
+                : "sm:max-w-3xl max-h-[85vh]",
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Add item</DialogTitle>
+            <DialogTitle>
+              {addStep === "details" && addSelection
+                ? `Add ${formatInventoryItemName(addSelection.name)}`
+                : "Add item"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+        <div
+          className="app-scrollbar flex-1 overflow-y-auto space-y-4 pr-1"
+          onScroll={(event) => {
+            if (addStep !== "search") return;
+            const target = event.currentTarget;
+            const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 120;
+            if (nearBottom) void loadMoreResults();
+          }}
+        >
             {addStep === "search" && (
               <>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -609,18 +736,24 @@ export function InventoryClient({
                     />
                   </div>
                   <Button onClick={runAddSearch} disabled={addLoading} className="gap-2">
-                    {addLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
+                      {addLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
                     Search
                   </Button>
                 </div>
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {addResults.map((result) => (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                  {addResults.map((result) => {
+                    const PlaceholderIcon = getIngredientFallbackIcon({
+                      name: result.name,
+                      aisle: result.aisle,
+                    });
+                    const hasImage = Boolean(result.image && !result.image.endsWith("/no.jpg"));
+                    return (
                     <button
                       key={result.id}
                       type="button"
@@ -629,91 +762,64 @@ export function InventoryClient({
                         void loadIngredientDetails(result);
                       }}
                       className={cn(
-                        "group flex flex-col rounded-lg border p-3 text-left transition hover:border-primary",
+                        "group flex flex-col rounded-lg border p-2 text-left transition hover:border-primary",
                         addSelection?.id === result.id && "border-primary bg-muted/50",
                       )}
                     >
-                      <div className="flex h-24 items-center justify-center rounded-md bg-muted">
-                        {result.image ? (
+                      <div className="flex h-28 items-center justify-center rounded-md bg-muted">
+                        {hasImage ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={result.image}
-                            alt={result.name}
-                            className="h-24 w-full rounded-md object-cover"
+                            src={result.image ?? ""}
+                            alt={formatInventoryItemName(result.name)}
+                            className="h-28 w-full rounded-md object-contain p-2"
                           />
                         ) : (
-                          <div className="text-sm text-muted-foreground">No image</div>
+                          <PlaceholderIcon className="h-6 w-6 text-muted-foreground" />
                         )}
                       </div>
                       <div className="mt-3 space-y-1">
-                        <p className="line-clamp-2 font-medium">{result.name}</p>
+                        <p className="line-clamp-2 font-medium">{formatInventoryItemName(result.name)}</p>
                         {result.aisle && <p className="text-xs text-muted-foreground">{result.aisle}</p>}
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
+                {addLoadingMore && (
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading more...
+                  </div>
+                )}
+                {!addLoadingMore && addResults.length > 0 && addResults.length >= addTotalResults && (
+                  <p className="text-center text-xs text-muted-foreground">End of results</p>
+                )}
               </>
             )}
 
             {addStep === "details" && addSelection && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 rounded-lg border p-3">
-                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-md bg-muted">
-                    {addSelection.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={addSelection.image}
-                        alt={addSelection.name}
-                        className="h-14 w-full object-cover"
-                      />
-                    ) : (
-                      <Package className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium">{addSelection.name}</p>
-                    {addSelection.aisle && (
-                      <p className="text-xs text-muted-foreground">{addSelection.aisle}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="add-qty">Quantity</Label>
-                    <Input
-                      id="add-qty"
-                      inputMode="decimal"
-                      value={addQuantity}
-                      onChange={(event) => setAddQuantity(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Unit</Label>
-                    <Select
-                      value={addUnitId ?? "none"}
-                      onValueChange={(value) => setAddUnitId(value === "none" ? null : value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Optional" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No unit</SelectItem>
-                        {displayUnits.map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>
-                            {unit.name}
-                            {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
+              <div className="mx-auto w-full max-w-md space-y-4">
+                <div className="space-y-3">
+                  <QuantityUnitRow
+                    label="Quantity"
+                    inputId="add-qty"
+                    value={addQuantity}
+                    onChange={setAddQuantity}
+                    onAdjust={adjustNumber}
+                    unitId={addUnitId}
+                    onUnitChange={setAddUnitId}
+                    units={addUnitOptions}
+                    quantityForLabel={addUnitQuantity}
+                  />
+
+                  <div className="space-y-1">
                     <Label>Location</Label>
                     <Select
                       value={addLocationId ?? "none"}
                       onValueChange={(value) => setAddLocationId(value === "none" ? null : value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-8 px-2">
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
                       <SelectContent>
@@ -725,38 +831,49 @@ export function InventoryClient({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="add-exp">Expiration date (optional)</Label>
-                    <Input
-                      id="add-exp"
-                      type="date"
-                      value={addExpiresAt}
-                      onChange={(event) => setAddExpiresAt(event.target.value)}
-                    />
-                  </div>
+
+                  <ExpirationPicker
+                    label="Expiration date"
+                    inputId="add-exp"
+                    value={addExpiresAt}
+                    inputValue={addExpiresAtInput}
+                    onValueChange={setAddExpiresAt}
+                    onInputValueChange={setAddExpiresAtInput}
+                    calendarOpen={addCalendarOpen}
+                    onCalendarOpenChange={setAddCalendarOpen}
+                    calendarMonth={addCalendarMonth}
+                    onCalendarMonthChange={setAddCalendarMonth}
+                    calendarDirection={addCalendarDirection}
+                    onCalendarDirectionChange={setAddCalendarDirection}
+                    calendarAnimKey={addCalendarAnimKey}
+                    onCalendarAnimKeyChange={setAddCalendarAnimKey}
+                  />
                 </div>
+
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
               </div>
             )}
           </div>
-          <DialogFooter>
+        {(addStep === "details" || (addStep === "search" && addSelection)) && (
+          <DialogFooter className="mt-auto bg-background pt-3 pb-2">
             {addStep === "details" ? (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setAddStep("search");
-                  setAddError(null);
-                }}
-                disabled={addSaving}
-              >
-                Back
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setAddStep("search");
+                    setAddError(null);
+                  }}
+                  disabled={addSaving}
+                >
+                  Back
+                </Button>
+                <Button onClick={handleAddItem} disabled={!addSelection || addSaving} className="gap-2">
+                  {addSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Add item
+                </Button>
+              </>
             ) : (
-              <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={addSaving}>
-                Cancel
-              </Button>
-            )}
-            {addStep === "search" ? (
               <Button
                 onClick={() => {
                   if (!addSelection) {
@@ -769,13 +886,9 @@ export function InventoryClient({
               >
                 Continue
               </Button>
-            ) : (
-              <Button onClick={handleAddItem} disabled={!addSelection || addSaving} className="gap-2">
-                {addSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Add to kitchen
-              </Button>
             )}
           </DialogFooter>
+        )}
         </DialogContent>
       </Dialog>
 
@@ -801,7 +914,7 @@ export function InventoryClient({
                     <SelectContent>
                       {manageStack.entries.map((entry) => (
                         <SelectItem key={entry.id} value={entry.id}>
-                          {entry.quantity} {entry.unit ?? ""} - {formatExpiry(entry.expiresAt)}
+                          {formatQuantityWithUnit(entry.quantity, entry.unit)} - {formatExpiry(entry.expiresAt)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -809,216 +922,33 @@ export function InventoryClient({
                 </div>
               )}
               <div className="space-y-3">
-                <div className="space-y-1">
-                  <Label htmlFor="manage-qty">Quantity</Label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-20">
-                      <Input
-                        id="manage-qty"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={3}
-                        value={manageQuantity}
-                        onChange={(event) => {
-                          const raw = event.target.value;
-                          if (!raw) {
-                            setManageQuantity(raw);
-                            return;
-                          }
-                          const parsed = Number.parseInt(raw, 10);
-                          if (!Number.isFinite(parsed)) {
-                            setManageQuantity(raw);
-                            return;
-                          }
-                          setManageQuantity(String(Math.min(parsed, 999)));
-                        }}
-                        className="h-8 w-20 pr-8 px-2"
-                      />
-                      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="h-5 w-5"
-                          aria-label="Increase quantity"
-                          onClick={() =>
-                            setManageQuantity((value) => {
-                              const next = adjustNumber(value, 1);
-                              const parsed = Number.parseInt(next, 10);
-                              return String(Math.min(parsed, 999));
-                            })
-                          }
-                        >
-                          <ChevronUp className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="h-5 w-5"
-                          aria-label="Decrease quantity"
-                          onClick={() => setManageQuantity((value) => adjustNumber(value, -1))}
-                        >
-                          <ChevronDown className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <Select
-                      value={manageUnitId ?? "none"}
-                      onValueChange={(value) => setManageUnitId(value === "none" ? null : value)}
-                    >
-                      <SelectTrigger className="h-8 px-2">
-                        <SelectValue placeholder="Optional" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No unit</SelectItem>
-                        {displayUnits.map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>
-                            {unit.name}
-                            {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manage-exp">Expiration date</Label>
-                  <div className="flex items-center gap-0">
-                    <div className="relative w-[7.25rem]">
-                      <Input
-                        id="manage-exp"
-                        type="text"
-                        placeholder="Select date"
-                        value={manageExpiresAtInput}
-                        readOnly
-                        onClick={() => setManageCalendarOpen(true)}
-                        className="h-8 w-full pr-7"
-                      />
-                      <Popover open={manageCalendarOpen} onOpenChange={setManageCalendarOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-                            aria-label="Pick expiration date"
-                          >
-                            <CalendarIcon className="h-3.5 w-3.5" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          side="bottom"
-                          avoidCollisions={false}
-                          align="end"
-                          sideOffset={-305}
-                          alignOffset={-150}
-                          className="w-auto border-0 p-0 shadow-none origin-top-right data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-1"
-                        >
-                          <Card className="max-w-[260px] py-3">
-                            <CardContent className="px-3">
-                              <div
-                                key={manageCalendarAnimKey}
-                                className={cn(
-                                  "animate-in fade-in-0 duration-200",
-                                  manageCalendarDirection === "next"
-                                    ? "slide-in-from-right-3"
-                                    : "slide-in-from-left-3",
-                                )}
-                              >
-                                <Calendar
-                                  mode="single"
-                                  selected={manageSelectedDate}
-                                  month={manageCalendarMonth}
-                                  onMonthChange={(nextMonth) => {
-                                    if (manageCalendarMonth && nextMonth) {
-                                      setManageCalendarDirection(
-                                        nextMonth > manageCalendarMonth ? "next" : "prev",
-                                      );
-                                    }
-                                    setManageCalendarMonth(nextMonth);
-                                    setManageCalendarAnimKey((value) => value + 1);
-                                  }}
-                                  onSelect={(date) => {
-                                    if (!date) {
-                                      setManageExpiresAt("");
-                                      setManageExpiresAtInput("");
-                                      return;
-                                    }
-                                    setManageExpiresAt(format(date, "yyyy-MM-dd"));
-                                    setManageExpiresAtInput(format(date, "MM/dd/yyyy"));
-                                    setManageCalendarMonth(new Date(date.getFullYear(), date.getMonth(), 1));
-                                  }}
-                                  fixedWeeks
-                                  className="bg-transparent p-0 [--cell-size:--spacing(8)]"
-                                />
-                              </div>
-                            </CardContent>
-                            <CardFooter className="flex flex-col gap-2 border-t px-3 pt-2 pb-2">
-                              <div className="flex flex-wrap gap-1.5">
-                                {[
-                                  { label: "+3d", kind: "days", value: 3 },
-                                  { label: "+1w", kind: "days", value: 7 },
-                                  { label: "+2w", kind: "days", value: 14 },
-                                  { label: "+1m", kind: "months", value: 1 },
-                                ].map((preset) => (
-                                  <Button
-                                    key={preset.label}
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1 px-2 text-xs"
-                                    onClick={() => {
-                                      const now = new Date();
-                                      const newDate =
-                                        preset.kind === "months"
-                                          ? addMonths(now, preset.value)
-                                          : addDays(now, preset.value);
-                                      setManageExpiresAt(format(newDate, "yyyy-MM-dd"));
-                                      setManageExpiresAtInput(format(newDate, "MM/dd/yyyy"));
-                                      const nextMonth = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
-                                      if (manageCalendarMonth) {
-                                        setManageCalendarDirection(
-                                          nextMonth > manageCalendarMonth ? "next" : "prev",
-                                        );
-                                      }
-                                      setManageCalendarMonth(nextMonth);
-                                      setManageCalendarAnimKey((value) => value + 1);
-                                    }}
-                                  >
-                                    {preset.label}
-                                  </Button>
-                                ))}
-                              </div>
-                              <Button
-                                size="sm"
-                                className="w-full"
-                                onClick={() => setManageCalendarOpen(false)}
-                              >
-                                Save
-                              </Button>
-                            </CardFooter>
-                          </Card>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {manageExpiresAtInput && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="-ml-1 h-8 text-red-600 hover:text-red-600"
-                        onClick={() => {
-                          setManageExpiresAt("");
-                          setManageExpiresAtInput("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Leave blank for no expiration.</p>
-                </div>
+                <QuantityUnitRow
+                  label="Quantity"
+                  inputId="manage-qty"
+                  value={manageQuantity}
+                  onChange={setManageQuantity}
+                  onAdjust={adjustNumber}
+                  unitId={manageUnitId}
+                  onUnitChange={setManageUnitId}
+                  units={manageUnitOptions}
+                  quantityForLabel={manageUnitQuantity}
+                />
+                <ExpirationPicker
+                  label="Expiration date"
+                  inputId="manage-exp"
+                  value={manageExpiresAt}
+                  inputValue={manageExpiresAtInput}
+                  onValueChange={setManageExpiresAt}
+                  onInputValueChange={setManageExpiresAtInput}
+                  calendarOpen={manageCalendarOpen}
+                  onCalendarOpenChange={setManageCalendarOpen}
+                  calendarMonth={manageCalendarMonth}
+                  onCalendarMonthChange={setManageCalendarMonth}
+                  calendarDirection={manageCalendarDirection}
+                  onCalendarDirectionChange={setManageCalendarDirection}
+                  calendarAnimKey={manageCalendarAnimKey}
+                  onCalendarAnimKeyChange={setManageCalendarAnimKey}
+                />
               </div>
               {manageError && <p className="text-sm text-destructive">{manageError}</p>}
             </div>
@@ -1060,7 +990,7 @@ export function InventoryClient({
                     <SelectContent>
                       {consumeStack.entries.map((entry) => (
                         <SelectItem key={entry.id} value={entry.id}>
-                          {entry.quantity} {entry.unit ?? ""} - {formatExpiry(entry.expiresAt)}
+                          {formatQuantityWithUnit(entry.quantity, entry.unit)} - {formatExpiry(entry.expiresAt)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1141,13 +1071,15 @@ export function InventoryClient({
                     </div>
                     {(() => {
                       const unitLabel = consumeSelectedEntry?.unit ?? "No unit";
+                      const unitDisplay =
+                        unitLabel === "No unit" ? unitLabel : formatUnitLabel(consumeUnitQuantity, unitLabel) || unitLabel;
                       return (
                         <Select value={unitLabel} disabled>
                           <SelectTrigger className="h-8 px-2">
                             <SelectValue placeholder="Unit" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value={unitLabel}>{unitLabel}</SelectItem>
+                            <SelectItem value={unitLabel}>{unitDisplay}</SelectItem>
                           </SelectContent>
                         </Select>
                       );
@@ -1155,7 +1087,7 @@ export function InventoryClient({
                   </div>
                   {consumeSelectedEntry && (
                     <p className="text-xs text-muted-foreground">
-                      On hand: {consumeSelectedEntry.quantity} {consumeSelectedEntry.unit ?? ""}
+                      On hand: {formatQuantityWithUnit(consumeSelectedEntry.quantity, consumeSelectedEntry.unit)}
                     </p>
                   )}
                 </div>
@@ -1183,21 +1115,288 @@ export function InventoryClient({
   );
 }
 
+function QuantityUnitRow({
+  label,
+  inputId,
+  value,
+  onChange,
+  onAdjust,
+  unitId,
+  onUnitChange,
+  units,
+  quantityForLabel,
+}: {
+  label: string;
+  inputId: string;
+  value: string;
+  onChange: (value: string) => void;
+  onAdjust: (value: string, delta: number, min?: number) => string;
+  unitId: string | null;
+  onUnitChange: (value: string | null) => void;
+  units: UnitOption[];
+  quantityForLabel: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={inputId}>{label}</Label>
+      <div className="flex items-center gap-2">
+        <div className="relative w-20">
+          <Input
+            id={inputId}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={3}
+            value={value}
+            onChange={(event) => {
+              const raw = event.target.value;
+              if (!raw) {
+                onChange(raw);
+                return;
+              }
+              const parsed = Number.parseInt(raw, 10);
+              if (!Number.isFinite(parsed)) {
+                onChange(raw);
+                return;
+              }
+              onChange(String(Math.min(parsed, 999)));
+            }}
+            className="h-8 w-20 pr-8 px-2"
+          />
+          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-5 w-5"
+              aria-label="Increase quantity"
+              onClick={() => {
+                const next = onAdjust(value, 1);
+                const parsed = Number.parseInt(next, 10);
+                onChange(String(Math.min(parsed, 999)));
+              }}
+            >
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-5 w-5"
+              aria-label="Decrease quantity"
+              onClick={() => onChange(onAdjust(value, -1))}
+            >
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <Select value={unitId ?? "none"} onValueChange={(val) => onUnitChange(val === "none" ? null : val)}>
+          <SelectTrigger className="h-8 px-2">
+            <SelectValue placeholder="Optional" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No unit</SelectItem>
+            {units.map((unit) => {
+              const labelValue = formatUnitLabel(quantityForLabel, unit.name);
+              return (
+                <SelectItem key={unit.id} value={unit.id}>
+                  {labelValue || unit.name}
+                  {unit.abbreviation ? ` (${unit.abbreviation})` : ""}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
+function ExpirationPicker({
+  label,
+  inputId,
+  value,
+  inputValue,
+  onValueChange,
+  onInputValueChange,
+  calendarOpen,
+  onCalendarOpenChange,
+  calendarMonth,
+  onCalendarMonthChange,
+  calendarDirection,
+  onCalendarDirectionChange,
+  calendarAnimKey,
+  onCalendarAnimKeyChange,
+}: {
+  label: string;
+  inputId: string;
+  value: string;
+  inputValue: string;
+  onValueChange: (value: string) => void;
+  onInputValueChange: (value: string) => void;
+  calendarOpen: boolean;
+  onCalendarOpenChange: (value: boolean) => void;
+  calendarMonth: Date | undefined;
+  onCalendarMonthChange: (value: Date | undefined) => void;
+  calendarDirection: "next" | "prev";
+  onCalendarDirectionChange: (value: "next" | "prev") => void;
+  calendarAnimKey: number;
+  onCalendarAnimKeyChange: (value: number) => void;
+}) {
+  const selectedDate = useMemo(() => {
+    if (!value) return undefined;
+    const parsed = parseISO(value);
+    return isValid(parsed) ? parsed : undefined;
+  }, [value]);
+  const displayValue = useMemo(() => {
+    if (inputValue) return inputValue;
+    if (!selectedDate) return "";
+    return format(selectedDate, "MM/dd/yyyy");
+  }, [inputValue, selectedDate]);
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={inputId}>{label}</Label>
+        <div className="flex items-center gap-2">
+        <div className="relative w-[7.25rem]">
+          <Input
+            id={inputId}
+            type="text"
+            placeholder="Select date"
+            value={displayValue}
+            readOnly
+            onClick={() => onCalendarOpenChange(true)}
+            className="h-8 w-full pr-7"
+          />
+          <Popover open={calendarOpen} onOpenChange={onCalendarOpenChange}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                aria-label="Pick expiration date"
+              >
+                <CalendarIcon className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              avoidCollisions={false}
+              align="end"
+              sideOffset={-305}
+              alignOffset={-150}
+              className="w-auto border-0 p-0 shadow-none origin-top-right data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-1"
+            >
+              <Card className="max-w-[260px] py-3">
+                <CardContent className="px-3">
+                  <div
+                    key={calendarAnimKey}
+                    className={cn(
+                      "animate-in fade-in-0 duration-200",
+                      calendarDirection === "next" ? "slide-in-from-right-3" : "slide-in-from-left-3",
+                    )}
+                  >
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      month={calendarMonth}
+                      onMonthChange={(nextMonth) => {
+                        if (calendarMonth && nextMonth) {
+                          onCalendarDirectionChange(nextMonth > calendarMonth ? "next" : "prev");
+                        }
+                        onCalendarMonthChange(nextMonth);
+                        onCalendarAnimKeyChange(calendarAnimKey + 1);
+                      }}
+                      onSelect={(date) => {
+                        if (!date) {
+                          onValueChange("");
+                          onInputValueChange("");
+                          return;
+                        }
+                        onValueChange(format(date, "yyyy-MM-dd"));
+                        onInputValueChange(format(date, "MM/dd/yyyy"));
+                        onCalendarMonthChange(new Date(date.getFullYear(), date.getMonth(), 1));
+                      }}
+                      fixedWeeks
+                      className="bg-transparent p-0 [--cell-size:--spacing(8)]"
+                    />
+                  </div>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-2 border-t px-3 pt-2 pb-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "+3d", kind: "days", value: 3 },
+                      { label: "+1w", kind: "days", value: 7 },
+                      { label: "+2w", kind: "days", value: 14 },
+                      { label: "+1m", kind: "months", value: 1 },
+                    ].map((preset) => (
+                      <Button
+                        key={preset.label}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 px-2 text-xs"
+                        onClick={() => {
+                          const now = new Date();
+                          const newDate =
+                            preset.kind === "months"
+                              ? addMonths(now, preset.value)
+                              : addDays(now, preset.value);
+                          onValueChange(format(newDate, "yyyy-MM-dd"));
+                          onInputValueChange(format(newDate, "MM/dd/yyyy"));
+                          const nextMonth = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
+                          if (calendarMonth) {
+                            onCalendarDirectionChange(nextMonth > calendarMonth ? "next" : "prev");
+                          }
+                          onCalendarMonthChange(nextMonth);
+                          onCalendarAnimKeyChange(calendarAnimKey + 1);
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button size="sm" className="w-full" onClick={() => onCalendarOpenChange(false)}>
+                    Save
+                  </Button>
+                </CardFooter>
+              </Card>
+            </PopoverContent>
+          </Popover>
+        </div>
+        {displayValue && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-red-600 hover:text-red-600"
+            onClick={() => {
+              onValueChange("");
+              onInputValueChange("");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">Leave blank for no expiration.</p>
+    </div>
+  );
+}
+
 function StackCard({
   stack,
   onManage,
   onConsume,
-  getPlaceholderIcon,
   formatExpiry,
 }: {
   stack: Stack;
   onManage: () => void;
   onConsume: () => void;
-  getPlaceholderIcon: (aisle: string | null) => typeof Package;
   formatExpiry: (value: string | null) => string;
 }) {
   const top = stack.entries[0];
-  const PlaceholderIcon = getPlaceholderIcon(stack.aisle);
+  const PlaceholderIcon = getIngredientFallbackIcon({ name: stack.itemName, aisle: stack.aisle });
   const count = stack.entries.length;
 
   return (
@@ -1230,8 +1429,7 @@ function StackCard({
           <div className="space-y-1">
             <p className="line-clamp-2 text-sm font-semibold">{stack.itemName}</p>
             <p className="text-xs text-muted-foreground">
-              {top.quantity}
-              {top.unit ? ` ${top.unit}` : ""} - {formatExpiry(top.expiresAt)}
+              {formatQuantityWithUnit(top.quantity, top.unit)} · Expires {formatExpiry(top.expiresAt)}
             </p>
           </div>
           <div className="mt-auto flex items-center justify-end gap-2">
@@ -1249,4 +1447,5 @@ function StackCard({
     </div>
   );
 }
+
 

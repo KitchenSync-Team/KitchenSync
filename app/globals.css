@@ -132,6 +132,25 @@
 }
 
 @layer utilities {
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground)) hsl(var(--muted));
+  }
+  .app-scrollbar::-webkit-scrollbar {
+    width: 10px;
+  }
+  .app-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 999px;
+  }
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.6);
+    border-radius: 999px;
+    border: 2px solid hsl(var(--muted));
+  }
+  .app-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.8);
+  }
   .calendar-weeks-before-enter {
     animation: calendar-slide-in-from-right 260ms ease-out both;
   }
