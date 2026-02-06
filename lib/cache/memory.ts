@@ -5,10 +5,6 @@ type CacheEntry<T> = {
 
 type CacheStore = Map<string, CacheEntry<unknown>>;
 
-declare global {
-  var __kitchenSyncCacheStore: CacheStore | undefined;
-}
-
 const globalForCache = globalThis as typeof globalThis & {
   __kitchenSyncCacheStore?: CacheStore;
 };
