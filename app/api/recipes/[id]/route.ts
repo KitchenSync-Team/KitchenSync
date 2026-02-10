@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { buildFallbackStandardized, standardizeRecipeDetails } from "@/lib/openai/recipes";
+import { attachIngredientMatch } from "@/lib/recipes/matching";
+import { loadUserRecipeContext } from "@/lib/recipes/preferences";
 import { normalizeRecipeResults } from "@/lib/recipes/search";
 import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
 import { spoonacularFetch } from "@/lib/spoonacular/fetch";
@@ -26,6 +28,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userContext = await loadUserRecipeContext(user.id);
 
     const { id } = await context.params;
     const recipeId = Number(id);
@@ -75,7 +78,12 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       }
     }
 
-    return NextResponse.json(recipe);
+    if (!recipe) {
+      return NextResponse.json(recipe);
+    }
+
+    const [enriched] = attachIngredientMatch([recipe], userContext.pantryItems);
+    return NextResponse.json(enriched);
   } catch (err) {
     console.error("Recipe info error:", err);
     const detail = err instanceof Error ? err.message : "Unknown error";

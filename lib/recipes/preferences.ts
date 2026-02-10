@@ -18,6 +18,12 @@ export type UserRecipeContext = {
   cuisineDislikes: string[];
   personalizationOptIn: boolean;
   pantryIngredients: string[];
+  pantryItems: {
+    name: string;
+    normalizedName: string;
+    spoonacularIngredientId: number | null;
+    quantity: number;
+  }[];
 };
 
 const MAX_PANTRY_INGREDIENTS = 30;
@@ -83,26 +89,55 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
   }
 
   let pantryIngredients: string[] = [];
+  let pantryItems: UserRecipeContext["pantryItems"] = [];
 
   if (kitchenId) {
     const { data: inventoryRows, error: inventoryError } = await admin
       .from("inventory")
-      .select("items(name)")
+      .select("quantity, items(name, spoonacular_ingredient_id)")
       .eq("kitchen_id", kitchenId)
       .order("created_at", { ascending: false })
       .limit(MAX_PANTRY_INGREDIENTS);
 
     if (!inventoryError && Array.isArray(inventoryRows)) {
-      pantryIngredients = inventoryRows
-        .map((row) => {
-          const item = Array.isArray(row.items) ? row.items[0] ?? row.items : row.items;
-          if (item && typeof item === "object" && "name" in item) {
-            const value = (item as { name: unknown }).name;
-            return typeof value === "string" ? value : null;
-          }
-          return null;
-        })
-        .filter((value): value is string => Boolean(value))
+      type PantryRow = {
+        quantity?: number | string | null;
+        items?: { name?: string | null; spoonacular_ingredient_id?: number | string | null } | unknown[];
+      };
+      const byKey = new Map<
+        string,
+        { name: string; normalizedName: string; spoonacularIngredientId: number | null; quantity: number }
+      >();
+
+      for (const sourceRow of inventoryRows) {
+        const row = sourceRow as PantryRow;
+        const item = Array.isArray(row.items) ? row.items[0] ?? row.items : row.items;
+        if (!item || typeof item !== "object" || !("name" in item)) continue;
+        const rawName = typeof item.name === "string" ? item.name.trim() : "";
+        const normalizedName = normalizeIngredientName(rawName);
+        if (!normalizedName) continue;
+        const rawSpoonId =
+          "spoonacular_ingredient_id" in item ? (item.spoonacular_ingredient_id as unknown) : null;
+        const spoonacularIngredientId = toNullableInteger(rawSpoonId);
+        const quantity = toPositiveNumber(row.quantity) ?? 1;
+        const key = spoonacularIngredientId ? `id:${spoonacularIngredientId}` : `name:${normalizedName}`;
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.quantity += quantity;
+          continue;
+        }
+        byKey.set(key, {
+          name: rawName,
+          normalizedName,
+          spoonacularIngredientId,
+          quantity,
+        });
+      }
+
+      pantryItems = Array.from(byKey.values()).slice(0, MAX_PANTRY_INGREDIENTS);
+      pantryIngredients = pantryItems
+        .map((item) => item.name.trim())
+        .filter(Boolean)
         .slice(0, MAX_PANTRY_INGREDIENTS);
     }
   }
@@ -116,5 +151,28 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
     cuisineDislikes,
     personalizationOptIn,
     pantryIngredients,
+    pantryItems,
   };
+}
+
+function normalizeIngredientName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function toNullableInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  }
+  return null;
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return null;
 }

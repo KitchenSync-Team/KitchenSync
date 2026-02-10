@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { InventoryIngredientCard } from "@/components/inventory/inventory-ingredient-card";
 import { formatInventoryExpiry, formatInventoryItemName, formatQuantityWithUnit, formatUnitLabel } from "@/lib/formatting/inventory";
 import { getIngredientFallbackIcon } from "@/lib/ingredients/icon";
 import { cn } from "@/lib/supabase/utils";
@@ -704,7 +705,6 @@ export function InventoryClient({
                         stack={stack}
                         onManage={() => openManage(stack)}
                         onConsume={() => openConsume(stack)}
-                        formatExpiry={formatExpiry}
                       />
                     ))
                   )}
@@ -1420,15 +1420,12 @@ function StackCard({
   stack,
   onManage,
   onConsume,
-  formatExpiry,
 }: {
   stack: Stack;
   onManage: () => void;
   onConsume: () => void;
-  formatExpiry: (value: string | null) => string;
 }) {
   const top = stack.entries[0];
-  const PlaceholderIcon = getIngredientFallbackIcon({ name: stack.itemName, aisle: stack.aisle });
   const count = stack.entries.length;
 
   return (
@@ -1441,30 +1438,24 @@ function StackCard({
           )}
         </>
       )}
-      <Card className="relative w-full max-w-[240px] overflow-hidden">
-        <div className="relative h-40 w-full bg-muted">
-          {stack.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={stack.imageUrl} alt={stack.itemName} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <PlaceholderIcon className="h-6 w-6 text-muted-foreground" />
-            </div>
-          )}
-          {count > 1 && (
+      <InventoryIngredientCard
+        name={stack.itemName}
+        imageUrl={stack.imageUrl}
+        aisle={stack.aisle}
+        quantity={top.quantity}
+        unit={top.unit}
+        expiresAt={top.expiresAt}
+        imageClassName="h-40 p-2"
+        imageObjectClassName="object-contain"
+        badgeContent={
+          count > 1 ? (
             <span className="absolute right-2 top-2 rounded-full border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
               {count}
             </span>
-          )}
-        </div>
-        <CardContent className="flex h-full flex-col gap-2 p-4">
-          <div className="space-y-1">
-            <p className="line-clamp-2 text-sm font-semibold">{stack.itemName}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatQuantityWithUnit(top.quantity, top.unit)} · Expires {formatExpiry(top.expiresAt)}
-            </p>
-          </div>
-          <div className="mt-auto flex items-center justify-end gap-2">
+          ) : undefined
+        }
+        footer={
+          <>
             <Button variant="ghost" size="sm" onClick={onManage} className="gap-1">
               <CalendarIcon className="h-4 w-4" />
               Manage
@@ -1473,11 +1464,9 @@ function StackCard({
               <Utensils className="h-4 w-4" />
               Consume
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </>
+        }
+      />
     </div>
   );
 }
-
-

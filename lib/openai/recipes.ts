@@ -28,7 +28,48 @@ const rateLimiterQueue: Array<() => void> = [];
 let currentConcurrentRequests = 0;
 const MAX_CONCURRENT_REQUESTS = Number(process.env.OPENAI_CONCURRENCY ?? 2);
 
-const SYSTEM_PROMPT = `You are a culinary data specialist that converts noisy recipe payloads into clean JSON that exactly matches a schema. Assume all measurements are in US cups/teaspoons/tablespoons or grams if units are unclear. Convert fractional quantities to decimal numbers (0.5, 1.25, etc.). Always include at least three instruction steps when directions exist and keep only one action per step. Format every ingredient name in Title Case and return amounts separately via the quantity + unit fields (do not embed units inside the name). Return the steps array as a list of sequential objects where each "instruction" field is a single, concise, imperative sentence (no paragraphs). Omit marketing fluff or HTML. Never wrap the JSON in backticks or prose.`;
+const SYSTEM_PROMPT = `You are a culinary data normalization specialist for KitchenSync.
+Return ONLY valid JSON matching the required schema. No markdown, no prose.
+
+Primary goals:
+1) Preserve meaning from source ingredients/instructions exactly.
+2) Normalize for readability without losing substitutions, alternatives, or dietary notes.
+3) Prevent punctuation artifacts and malformed display text.
+
+Output requirements:
+
+INGREDIENTS
+- Keep "name" as the core ingredient only, in Title Case, with no trailing punctuation.
+- Put numeric amount in "quantity" (number only) and unit in "unit" (short readable text).
+- Put preparation details in "preparation" (e.g., minced, chopped, softened).
+- Put substitutions, alternatives, dietary notes, and parenthetical hints in "notes".
+- Never drop meaningful source qualifiers if they affect diet/allergen suitability.
+
+TEXT CLEANUP RULES (critical)
+- Do not include trailing commas, dangling punctuation, or duplicate punctuation in any field.
+- No ingredient line should end with comma-only artifacts (e.g., "1 cup of milk,").
+- Use plain ASCII punctuation.
+- Remove formatting noise while preserving meaning.
+
+UNITS / QUANTITIES
+- Convert fractions to decimals where possible (1/3 -> 0.33, 1/2 -> 0.5).
+- Keep unit labels consistent and neutral in "unit" (e.g., "cup", "tsp", "lb").
+- If quantity is unknown, use quantity: null and keep context in "notes".
+
+STEPS
+- Keep each step concise and imperative.
+- Preserve safety or dietary-relevant tips.
+- If source includes a substitution tip, include it in either step "tips" or ingredient "notes" (prefer ingredient "notes" when ingredient-specific).
+
+METADATA
+- Preserve diets/tags from source when present.
+- Do not infer unsupported diets beyond source data.
+
+QUALITY CHECK BEFORE RETURN
+- Every string is trimmed.
+- No value ends with "," or ";".
+- No empty placeholder text.
+- JSON parses and conforms to schema exactly.`;
 
 export async function standardizeRecipeDetails(
   input: StandardizeInput,
@@ -370,17 +411,23 @@ function enhanceStandardizedResult(
   data: StandardizedRecipeDetails,
 ): StandardizedRecipeDetails {
   const ingredients = (data.ingredients ?? []).map((ing) => {
-    const trimmedName = titleCase(ing.name);
+    const trimmedName = cleanupText(titleCase(ing.name));
     const quantity =
       typeof ing.quantity === "number" && ing.quantity > 0
         ? Number(ing.quantity)
         : null;
-    const unit = ing.unit?.trim() ?? null;
+    const unit = cleanupText(ing.unit?.trim() ?? "") || null;
+    const preparation = cleanupText(ing.preparation?.trim() ?? "") || null;
+    const notes = cleanupText(ing.notes?.trim() ?? "") || null;
+    const pantryCategory = cleanupText(ing.pantryCategory?.trim() ?? "") || null;
     return {
       ...ing,
       name: trimmedName,
       quantity,
       unit: unit && unit.length > 0 ? unit : null,
+      preparation,
+      notes,
+      pantryCategory,
     };
   });
 
@@ -415,7 +462,14 @@ function normalizeSteps(steps: StandardizedRecipeDetails["steps"]) {
   return expanded.map((step, idx) => ({
     ...step,
     number: idx + 1,
-    instruction: capitalize(step.instruction),
+    instruction: cleanupText(capitalize(step.instruction)),
+    tips: cleanupText(step.tips ?? "") || null,
+    equipment: Array.isArray(step.equipment)
+      ? step.equipment.map((item) => cleanupText(item)).filter(Boolean)
+      : step.equipment,
+    ingredients: Array.isArray(step.ingredients)
+      ? step.ingredients.map((item) => cleanupText(item)).filter(Boolean)
+      : step.ingredients,
   }));
 }
 
@@ -451,5 +505,14 @@ function titleCase(value: string) {
       return part.charAt(0).toUpperCase() + part.slice(1);
     })
     .join(" ")
+    .trim();
+}
+
+function cleanupText(value: string) {
+  if (!value) return "";
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[;,]+\s*$/g, "")
+    .replace(/\s+([,.;:!?])/g, "$1")
     .trim();
 }

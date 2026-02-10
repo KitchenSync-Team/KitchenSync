@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 
 import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
+import {
+  normalizeCuisineFilters,
+  normalizeDietFilters,
+  normalizeIntoleranceFilters,
+} from "@/lib/recipes/spoonacular-filters";
 
 import type { RecipeSearchPayload, RecipeSearchResponse, NormalizedRecipe } from "./types";
 import { loadUserRecipeContext } from "./preferences";
@@ -27,7 +32,15 @@ type BuildParamsResult = {
   cacheKey: string;
   applied: RecipeSearchResponse["appliedPreferences"];
   headers: Record<string, string>;
+  pantryItems: {
+    name: string;
+    normalizedName: string;
+    spoonacularIngredientId: number | null;
+    quantity: number;
+  }[];
 };
+
+const MAX_INCLUDE_INGREDIENTS = 8;
 
 export async function buildRecipeSearch({
   payload,
@@ -42,34 +55,51 @@ export async function buildRecipeSearch({
 
   const personalizationSkipped = payload.ignorePreferences === true || !userContext.personalizationOptIn;
 
-  const diet = personalizationSkipped
+  const dietRaw = personalizationSkipped
     ? []
     : payload.applyDiet === false
       ? []
       : payload.diet ?? userContext.dietaryPreferences;
+  const diet = normalizeDietFilters(dietRaw);
 
-  const allergens = personalizationSkipped
+  const allergensRaw = personalizationSkipped
     ? []
     : payload.applyAllergens === false
       ? []
       : payload.allergens ?? userContext.allergens;
+  const allergens = normalizeIntoleranceFilters(allergensRaw);
 
-  const includeCuisines =
+  const includeCuisinesRaw =
     personalizationSkipped || payload.useCuisineLikes === false
       ? []
       : payload.cuisineLikes ?? userContext.cuisineLikes;
+  const includeCuisines = normalizeCuisineFilters(includeCuisinesRaw);
 
-  const excludeCuisines =
+  const excludeCuisinesRaw =
     personalizationSkipped || payload.applyCuisineDislikes === false
       ? []
       : payload.cuisineDislikes ?? userContext.cuisineDislikes;
+  const excludeCuisines = normalizeCuisineFilters(excludeCuisinesRaw);
+  const hasKeywordQuery = Boolean(payload.query?.trim());
+  // Spoonacular cuisine filtering can over-constrain keyword lookups.
+  // Keep cuisine filters for broad discovery mode, but not for direct text queries.
+  const includeCuisinesApplied = hasKeywordQuery ? [] : includeCuisines;
+  const excludeCuisinesApplied = hasKeywordQuery ? [] : excludeCuisines;
 
-  const includeIngredients = [
-    ...(payload.includeIngredients ?? []),
-    ...(payload.usePantry ? userContext.pantryIngredients : []),
-  ]
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const selectedIngredients = normalizeSearchIngredients(payload.includeIngredients ?? []);
+  const pantryIngredients = payload.usePantry
+    ? normalizeSearchIngredients(userContext.pantryIngredients)
+    : [];
+
+  // Use explicit ingredient selections whenever present.
+  // Only fall back to full-kitchen ingredient filtering when running
+  // ingredient-only searches (no keyword query), otherwise query searches
+  // become unintentionally over-constrained.
+  const includeIngredients = (
+    selectedIngredients.length > 0
+      ? selectedIngredients
+      : (!payload.query && payload.usePantry ? pantryIngredients : [])
+  ).slice(0, MAX_INCLUDE_INGREDIENTS);
 
   if (!payload.query && includeIngredients.length === 0) {
     throw new Error("Please provide a keyword or at least one ingredient to search.");
@@ -78,51 +108,45 @@ export async function buildRecipeSearch({
   const params = new URLSearchParams();
   const limit = clamp(payload.number ?? 12, 1, 24);
   params.set("number", String(limit));
-  params.set("instructionsRequired", "true");
   params.set("addRecipeInformation", "true");
-  params.set("fillIngredients", "true");
+  if (!hasKeywordQuery) {
+    // Ingredient-only discovery benefits from full ingredient payloads.
+    params.set("instructionsRequired", "true");
+    params.set("fillIngredients", "true");
+  }
 
   if (payload.maxReadyTime) {
     params.set("maxReadyTime", String(Math.max(1, payload.maxReadyTime)));
   }
 
-  if (payload.sort) {
-    params.set("sort", payload.sort);
+  const supportedComplexSort = toComplexSearchSort(payload.sort);
+  if (supportedComplexSort) {
+    params.set("sort", supportedComplexSort);
   }
 
-  if (includeIngredients.length > 0) {
+  if (!hasKeywordQuery && includeIngredients.length > 0) {
     params.set("includeIngredients", includeIngredients.join(","));
   }
 
-  if (diet.length > 0) {
+  if (!hasKeywordQuery && diet.length > 0) {
     params.set("diet", diet.join(","));
   }
 
-  if (allergens.length > 0) {
+  if (!hasKeywordQuery && allergens.length > 0) {
     params.set("intolerances", allergens.join(","));
   }
 
-  if (includeCuisines.length > 0) {
-    params.set("cuisine", includeCuisines.join(","));
+  if (!hasKeywordQuery && includeCuisinesApplied.length > 0) {
+    params.set("cuisine", includeCuisinesApplied.join(","));
   }
 
-  if (excludeCuisines.length > 0) {
-    params.set("excludeCuisine", excludeCuisines.join(","));
+  if (!hasKeywordQuery && excludeCuisinesApplied.length > 0) {
+    params.set("excludeCuisine", excludeCuisinesApplied.join(","));
   }
 
-  let endpoint: BuildParamsResult["endpoint"] = "complexSearch";
+  const endpoint: BuildParamsResult["endpoint"] = "complexSearch";
 
-  if (!payload.query && includeIngredients.length > 0) {
-    endpoint = "findByIngredients";
-    params.set("ingredients", includeIngredients.join(","));
-    params.delete("includeIngredients");
-    // findByIngredients sort values: 1 maximize used, 2 minimize missing
-    if (payload.sort === "min-missing-ingredients") {
-      params.set("ranking", "2");
-    } else {
-      params.set("ranking", "1");
-    }
-  } else if (payload.query) {
+  if (payload.query) {
     params.set("query", payload.query.trim());
   }
 
@@ -134,23 +158,23 @@ export async function buildRecipeSearch({
 
   const cacheKey = `recipes:${hashKey(rawCacheKey)}`;
 
-  const url =
-    endpoint === "findByIngredients"
-      ? buildSpoonacularUrl(client, "/recipes/findByIngredients", params)
-      : buildSpoonacularUrl(client, "/recipes/complexSearch", params);
+  const url = buildSpoonacularUrl(client, "/recipes/complexSearch", params);
 
   return {
     endpoint,
     url,
     cacheKey,
     headers: client.headers,
+    pantryItems: userContext.pantryItems,
     applied: {
       diet,
       allergens,
-      includeCuisines,
-      excludeCuisines,
+      includeCuisines: hasKeywordQuery ? includeCuisines : includeCuisinesApplied,
+      excludeCuisines: hasKeywordQuery ? excludeCuisines : excludeCuisinesApplied,
       personalizationSkipped,
-      usedPantryItems: payload.usePantry ? userContext.pantryIngredients : [],
+      usedPantryItems: selectedIngredients.length === 0 && !hasKeywordQuery && payload.usePantry
+        ? userContext.pantryIngredients
+        : [],
     },
   };
 }
@@ -228,11 +252,13 @@ function buildRecipeUrl(title: string, id: number) {
 
 function toNormalizedIngredients(
   list: unknown,
-): { name: string; original: string }[] | undefined {
+): { id?: number; name: string; original: string }[] | undefined {
   if (!Array.isArray(list)) return undefined;
   return list
     .map((entry) => {
       if (!entry || typeof entry !== "object") return null;
+      const id =
+        "id" in entry && typeof entry.id === "number" && Number.isFinite(entry.id) ? entry.id : null;
       const name = "name" in entry && typeof entry.name === "string" ? entry.name : null;
       const original =
         "original" in entry && typeof entry.original === "string"
@@ -240,11 +266,12 @@ function toNormalizedIngredients(
           : name ?? null;
       if (!name && !original) return null;
       return {
+        ...(id !== null ? { id } : {}),
         name: name ?? original ?? "",
         original: original ?? name ?? "",
       };
     })
-    .filter((value): value is { name: string; original: string } => Boolean(value));
+    .filter((value): value is { id?: number; name: string; original: string } => Boolean(value));
 }
 
 function hashKey(value: string) {
@@ -253,4 +280,68 @@ function hashKey(value: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function toComplexSearchSort(value: string | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "popularity") return "popularity";
+  if (normalized === "time") return "time";
+  return null;
+}
+
+function normalizeSearchIngredients(values: string[]): string[] {
+  const deduped = new Set<string>();
+  for (const raw of values) {
+    const normalized = normalizeIngredientForSearch(raw);
+    if (!normalized) continue;
+    deduped.add(normalized);
+  }
+  return Array.from(deduped);
+}
+
+function normalizeIngredientForSearch(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "";
+
+  // Canonicalize common inventory names to Spoonacular-friendly terms.
+  if (
+    /\b(marinara|pasta sauce|spaghetti sauce|jarred pasta sauce|tomato basil sauce)\b/.test(
+      normalized,
+    )
+  ) {
+    return "tomato sauce";
+  }
+
+  if (
+    /\b(ground chuck|ground sirloin|hamburger|hamburger meat|minced beef)\b/.test(normalized)
+  ) {
+    return "ground beef";
+  }
+
+  if (
+    /\b(chicken breast halves|skinless boneless chicken breast halves|chicken breasts)\b/.test(
+      normalized,
+    )
+  ) {
+    return "chicken breast";
+  }
+
+  if (/\begg whites?\b/.test(normalized)) {
+    return "egg white";
+  }
+
+  if (/\bpart skim mozzarella\b/.test(normalized)) {
+    return "mozzarella";
+  }
+
+  if (/\bparmigiano reggiano\b/.test(normalized)) {
+    return "parmesan";
+  }
+
+  return normalized;
 }

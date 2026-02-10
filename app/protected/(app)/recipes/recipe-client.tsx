@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2, Search, Sparkles, Timer, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, Search, Sparkles, Timer, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,9 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { InventoryIngredientCard } from "@/components/inventory/inventory-ingredient-card";
 import { RecipeCard } from "@/components/recipes/recipe-card";
+import { RecipeTagReferenceBadge } from "@/components/recipes/recipe-tag-reference-badge";
 import { RecipeCardSkeleton } from "@/components/recipes/recipe-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatInventoryItemName } from "@/lib/formatting/inventory";
+import { getGlutenSafetyWarning } from "@/lib/recipes/gluten-safety";
 import type { AppliedPreferences, NormalizedRecipe, RecipeSearchResponse } from "@/lib/recipes/types";
 import {
   ALLERGEN_OPTIONS,
@@ -36,9 +40,33 @@ type SearchMeta = {
   appliedPreferences: AppliedPreferences;
 };
 
+type PantryPickerItem = {
+  id: string;
+  name: string;
+  spoonacularIngredientId: number | null;
+  quantity: number;
+  unit: string | null;
+  expiresAt: string | null;
+  aisle: string | null;
+  imageUrl: string | null;
+  locationId: string;
+  locationName: string;
+};
+
+type PantryPickerLocation = {
+  id: string;
+  name: string;
+  items: PantryPickerItem[];
+};
+
 export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot }) {
   const [query, setQuery] = useState("");
-  const [ingredientsInput, setIngredientsInput] = useState("");
+  const [pantryDialogOpen, setPantryDialogOpen] = useState(false);
+  const [pantryLocations, setPantryLocations] = useState<PantryPickerLocation[]>([]);
+  const [pantryLoading, setPantryLoading] = useState(false);
+  const [pantryError, setPantryError] = useState<string | null>(null);
+  const [pantryFilter, setPantryFilter] = useState("");
+  const [selectedPantryItemIds, setSelectedPantryItemIds] = useState<string[]>([]);
   const [usePantry, setUsePantry] = useState(true);
   const [ignorePreferences, setIgnorePreferences] = useState(false);
   const [maxReadyTime, setMaxReadyTime] = useState<string>("");
@@ -69,6 +97,10 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const dietBadges = Array.from(
     new Set([...(detailStandardized?.metadata?.diets ?? []), ...(detailInfo?.diets ?? [])]),
   ).filter((value) => value.trim().length > 0);
+  const glutenSafetyWarning = getGlutenSafetyWarning({
+    diets: dietBadges,
+    extendedIngredients: detailInfo?.extendedIngredients,
+  });
   const allergenBadges = (detailStandardized?.metadata?.tags ?? []).filter((tag) =>
     /free|gluten|dairy|nut|soy|egg|shellfish|allergen/i.test(tag),
   );
@@ -108,6 +140,36 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     () => Object.fromEntries(CUISINE_PREFERENCE_OPTIONS.map((option) => [option.value, option.label])),
     [],
   );
+  const pantryItemIndex = useMemo(() => {
+    const index = new Map<string, PantryPickerItem>();
+    for (const location of pantryLocations) {
+      for (const item of location.items) {
+        index.set(item.id, item);
+      }
+    }
+    return index;
+  }, [pantryLocations]);
+  const selectedPantryItems = useMemo(
+    () =>
+      selectedPantryItemIds
+        .map((id) => pantryItemIndex.get(id))
+        .filter((item): item is PantryPickerItem => Boolean(item)),
+    [pantryItemIndex, selectedPantryItemIds],
+  );
+  const filteredPantryLocations = useMemo(() => {
+    const needle = pantryFilter.trim().toLowerCase();
+    if (!needle) return pantryLocations;
+    return pantryLocations
+      .map((location) => ({
+        ...location,
+        items: location.items.filter((item) => {
+          const blob = `${item.name} ${item.aisle ?? ""} ${location.name}`.toLowerCase();
+          return blob.includes(needle);
+        }),
+      }))
+      .filter((location) => location.items.length > 0);
+  }, [pantryFilter, pantryLocations]);
+  const trimmedQuery = query.trim();
 
   const toggleDiet = (value: string) => {
     setSelectedDiets((current) =>
@@ -156,6 +218,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setSort("max-used-ingredients");
     setUsePantry(true);
     setIgnorePreferences(false);
+    setSelectedPantryItemIds([]);
   };
 
   const resetFiltersToProfile = () => {
@@ -164,6 +227,64 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setSelectedLikes(preferences.cuisineLikes ?? []);
     setSelectedDislikes(preferences.cuisineDislikes ?? []);
   };
+
+  const loadPantryInventory = useCallback(async () => {
+    if (pantryLoading) return;
+    setPantryLoading(true);
+    setPantryError(null);
+    try {
+      const res = await fetch("/api/recipes/pantry");
+      const data = (await res.json()) as {
+        locations?: {
+          id: string;
+          name: string;
+          items: Omit<PantryPickerItem, "locationId" | "locationName">[];
+        }[];
+        error?: string;
+        detail?: string;
+      };
+      if (!res.ok) {
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : typeof data.detail === "string"
+              ? data.detail
+              : "Unable to load kitchen inventory.";
+        setPantryError(message);
+        return;
+      }
+      const locations = Array.isArray(data.locations)
+        ? data.locations.map((location) => ({
+          id: location.id,
+          name: location.name,
+          items: (location.items ?? []).map((item) => ({
+            ...item,
+            id: `${location.id}:${item.id}`,
+            locationId: location.id,
+            locationName: location.name,
+          })),
+        }))
+        : [];
+      setPantryLocations(locations);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load kitchen inventory.";
+      setPantryError(message);
+    } finally {
+      setPantryLoading(false);
+    }
+  }, [pantryLoading]);
+
+  useEffect(() => {
+    if (!pantryDialogOpen) return;
+    if (pantryLocations.length > 0) return;
+    void loadPantryInventory();
+  }, [loadPantryInventory, pantryDialogOpen, pantryLocations.length]);
+
+  const togglePantryItem = useCallback((id: string) => {
+    setSelectedPantryItemIds((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+  }, []);
 
   const fetchRecipeDetails = useCallback(
     async (recipe: NormalizedRecipe): Promise<NormalizedRecipe> => {
@@ -262,17 +383,27 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setError(null);
     prefetchAbortRef.current.generation += 1;
 
-    const includeIngredients = ingredientsInput
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    const queryValue = trimmedQuery;
+    const includeIngredients = Array.from(
+      new Set(
+        selectedPantryItems
+          .map((item) => item.name.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (!queryValue && includeIngredients.length === 0 && !usePantry) {
+      setError("Add a keyword or select kitchen ingredients to search.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/recipes/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: query.trim() || undefined,
+          query: queryValue || undefined,
           includeIngredients,
           maxReadyTime: parsedMaxReadyTime,
           sort,
@@ -301,16 +432,52 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
         return;
       }
 
-      setResults(Array.isArray(data.results) ? data.results : []);
-      if (Array.isArray(data.results)) {
+      let nextResults = Array.isArray(data.results) ? data.results : [];
+
+      // Last-resort fallback for exact keyword lookups:
+      // retry with only the query so hidden filter state cannot zero out results.
+      if (nextResults.length === 0 && queryValue) {
+        try {
+          const queryOnlyRes = await fetch("/api/recipes/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: queryValue,
+              includeIngredients: [],
+              usePantry: false,
+              ignorePreferences: true,
+              diet: [],
+              allergens: [],
+              cuisineLikes: [],
+              cuisineDislikes: [],
+              useCuisineLikes: false,
+              applyDiet: false,
+              applyAllergens: false,
+              applyCuisineDislikes: false,
+            }),
+          });
+          const queryOnlyData = (await queryOnlyRes.json()) as Partial<RecipeSearchResponse> & Record<string, unknown>;
+          if (queryOnlyRes.ok && Array.isArray(queryOnlyData.results)) {
+            nextResults = queryOnlyData.results;
+          }
+        } catch {
+          // keep original empty state if query-only retry fails
+        }
+      }
+
+      setResults(nextResults);
+      if (nextResults.length > 0) {
         const nextGeneration = prefetchAbortRef.current.generation;
         prefetchBatchDetails(
-          data.results.slice(0, 12).map((recipe: NormalizedRecipe) => ({ ...recipe })),
+          nextResults.slice(0, 12).map((recipe: NormalizedRecipe) => ({ ...recipe })),
           nextGeneration,
         );
       }
       setMeta({
-        totalResults: typeof data.totalResults === "number" ? data.totalResults : 0,
+        totalResults:
+          nextResults.length > 0
+            ? nextResults.length
+            : (typeof data.totalResults === "number" ? data.totalResults : 0),
         cached: data.cached === true,
         appliedPreferences: {
           diet: selectedDiets,
@@ -334,24 +501,18 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setError(null);
     prefetchAbortRef.current.generation += 1;
 
-    const includeTags = [...selectedDiets, ...selectedAllergens, ...selectedLikes].filter(Boolean);
-    const excludeTags = [...selectedDislikes].filter(Boolean);
+    const hasActiveRandomFilters =
+      selectedDiets.length > 0 ||
+      selectedAllergens.length > 0 ||
+      selectedLikes.length > 0 ||
+      selectedDislikes.length > 0;
+
     const params = new URLSearchParams();
     params.set("number", "12");
     if (selectedDiets.length > 0) params.set("diet", selectedDiets.join(","));
     if (selectedAllergens.length > 0) params.set("intolerances", selectedAllergens.join(","));
     if (selectedLikes.length > 0) params.set("cuisine", selectedLikes.join(","));
     if (selectedDislikes.length > 0) params.set("excludeCuisine", selectedDislikes.join(","));
-    if (includeTags.length > 0) {
-      const value = includeTags.join(",");
-      params.set("include-tags", value);
-      params.set("include", value);
-    }
-    if (excludeTags.length > 0) {
-      const value = excludeTags.join(",");
-      params.set("exclude-tags", value);
-      params.set("exclude", value);
-    }
 
     try {
       const res = await fetch(`/api/recipes/random?${params.toString()}`);
@@ -369,8 +530,8 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
 
       let nextResults = Array.isArray(data.results) ? data.results : [];
 
-      // If nothing came back with filters, fall back to an unfiltered random pull.
-      if (nextResults.length === 0) {
+      // Only fall back to unfiltered random when no filters are active.
+      if (nextResults.length === 0 && !hasActiveRandomFilters) {
         try {
           const fallbackRes = await fetch("/api/recipes/random?number=12");
           const fallbackData = await fallbackRes.json();
@@ -383,7 +544,11 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
       }
 
       if (nextResults.length === 0) {
-        setError("No recipes right now. Try again or loosen the filters.");
+        setError(
+          hasActiveRandomFilters
+            ? "No recipes matched your current filters. Loosen diet/allergen/cuisine filters and try again."
+            : "No recipes right now. Try again or loosen the filters.",
+        );
       }
 
       setResults(nextResults);
@@ -425,6 +590,115 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="space-y-4 rounded-xl border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Search setup</p>
+                <p className="text-xs text-muted-foreground">
+                  Choose ingredient scope, timing, and ranking before searching.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">Kitchen ingredients</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setPantryDialogOpen(true)}
+                  >
+                    Select ingredients
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedPantryItemIds([])}
+                    disabled={selectedPantryItems.length === 0}
+                  >
+                    Clear selected
+                  </Button>
+                </div>
+                {selectedPantryItems.length > 0 ? (
+                  <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1">
+                    {selectedPantryItems.map((item) => (
+                      <Badge key={`selected-sidebar-${item.id}`} variant="secondary" className="gap-2">
+                        {formatInventoryItemName(item.name)}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${item.name}`}
+                          className="inline-flex"
+                          onClick={() => togglePantryItem(item.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No ingredients selected yet.</p>
+                )}
+              </div>
+
+              <div className="h-px bg-border" />
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-sm">Ingredient scope</Label>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">
+                        {selectedPantryItems.length > 0
+                          ? "Also include all kitchen items"
+                          : "Include all kitchen items"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Broaden results with your full kitchen inventory.</p>
+                    </div>
+                    <Switch id="use-pantry" checked={usePantry} onCheckedChange={setUsePantry} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Ready in (minutes)</p>
+                    <p className="text-xs text-muted-foreground">Skip long cooks.</p>
+                  </div>
+                  <Input
+                    className="w-24"
+                    inputMode="numeric"
+                    value={maxReadyTime}
+                    onChange={(event) => setMaxReadyTime(event.target.value)}
+                    placeholder="30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm">Sort</Label>
+                  <Select value={sort} onValueChange={setSort}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sort results" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="max-used-ingredients">Use what I have</SelectItem>
+                      <SelectItem value="min-missing-ingredients">Minimize missing</SelectItem>
+                      <SelectItem value="popularity">Most popular</SelectItem>
+                      <SelectItem value="time">Fastest</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">Use profile preferences</p>
+                    <p className="text-xs text-muted-foreground">Apply your diet, allergens, and cuisine profile.</p>
+                  </div>
+                  <Switch
+                    id="use-profile-preferences"
+                    checked={!ignorePreferences}
+                    onCheckedChange={(checked) => setIgnorePreferences(!checked)}
+                  />
+                </div>
+              </div>
+            </div>
+
             <DietAllergenGroup
               title="Dietary preferences"
               description="Select eating styles to include."
@@ -464,54 +738,6 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
               tone="negative"
             />
 
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Ready in (minutes)</p>
-                  <p className="text-xs text-muted-foreground">Skip long cooks.</p>
-                </div>
-                <Input
-                  className="w-24"
-                  inputMode="numeric"
-                  value={maxReadyTime}
-                  onChange={(event) => setMaxReadyTime(event.target.value)}
-                  placeholder="30"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm">Sort</Label>
-                <Select value={sort} onValueChange={setSort}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sort results" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="max-used-ingredients">Use what I have</SelectItem>
-                    <SelectItem value="min-missing-ingredients">Minimize missing</SelectItem>
-                    <SelectItem value="popularity">Most popular</SelectItem>
-                    <SelectItem value="time">Fastest</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Switch id="use-pantry" checked={usePantry} onCheckedChange={setUsePantry} />
-                  <Label htmlFor="use-pantry" className="text-sm">
-                    Use pantry
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="ignore-preferences"
-                    checked={ignorePreferences}
-                    onCheckedChange={setIgnorePreferences}
-                  />
-                  <Label htmlFor="ignore-preferences" className="text-sm">
-                    Skip my profile
-                  </Label>
-                </div>
-              </div>
-            </div>
-
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={clearAllFilters}>
                 Clear filters
@@ -529,11 +755,11 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
           <CardContent className="space-y-4 pt-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
               <div className="flex w-full flex-1 min-w-0">
-              <Input
-                id="query"
-                placeholder="Search recipes (e.g., chicken soup, pesto pasta)"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                <Input
+                  id="query"
+                  placeholder="Search recipes (e.g., chicken soup, pesto pasta)"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
                   className="w-full min-w-[260px]"
                   onKeyDown={(event) => {
                     if (event.key === "Enter") runSearch();
@@ -573,18 +799,6 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                   )}
                 </Button>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground" htmlFor="ingredients">
-                Ingredients you want to use (comma separated)
-              </Label>
-              <Input
-                id="ingredients"
-                placeholder="e.g., chicken, rice, broccoli"
-                value={ingredientsInput}
-                onChange={(event) => setIngredientsInput(event.target.value)}
-              />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -637,6 +851,99 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
         )}
       </div>
 
+      <Dialog open={pantryDialogOpen} onOpenChange={setPantryDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Select kitchen ingredients</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: "65vh" }}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <Input
+                placeholder="Filter ingredients or locations"
+                value={pantryFilter}
+                onChange={(event) => setPantryFilter(event.target.value)}
+                className="md:max-w-sm"
+              />
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{selectedPantryItems.length} selected</Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedPantryItemIds([])}
+                  disabled={selectedPantryItems.length === 0}
+                >
+                  Clear
+                </Button>
+                <Button type="button" size="sm" onClick={() => setPantryDialogOpen(false)}>
+                  Use selected
+                </Button>
+              </div>
+            </div>
+
+            {pantryError && <p className="text-sm text-destructive">{pantryError}</p>}
+            {pantryLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <Skeleton key={`pantry-skeleton-${idx}`} className="h-24 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : filteredPantryLocations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pantry ingredients found for this filter.</p>
+            ) : (
+              <div className="space-y-4">
+                {filteredPantryLocations.map((location) => (
+                  <div key={`loc-${location.id}`} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">{location.name}</h3>
+                      <span className="text-xs text-muted-foreground">{location.items.length} items</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 justify-items-center md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                      {location.items.map((item) => {
+                        const selected = selectedPantryItemIds.includes(item.id);
+                        return (
+                          <button
+                            key={`pantry-item-${item.id}`}
+                            type="button"
+                            onClick={() => togglePantryItem(item.id)}
+                            className="w-full max-w-[190px] text-left focus-visible:outline-none"
+                          >
+                            <InventoryIngredientCard
+                              name={item.name}
+                              imageUrl={item.imageUrl}
+                              aisle={item.aisle}
+                              quantity={item.quantity}
+                              unit={item.unit}
+                              expiresAt={item.expiresAt}
+                              selected={selected}
+                              imageClassName="h-28 p-2"
+                              imageObjectClassName="object-contain"
+                              contentClassName="p-3"
+                              badgeContent={
+                                selected ? (
+                                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background/90 px-2 py-1 text-xs font-medium text-emerald-700 shadow-sm dark:text-emerald-200">
+                                    <Check className="h-3 w-3" />
+                                    Selected
+                                  </span>
+                                ) : undefined
+                              }
+                              className={cn(
+                                "transition",
+                                "hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/50",
+                              )}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
@@ -649,7 +956,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                 <img
                   src={detailInfo.image}
                   alt={detailInfo.title}
-                  className="w-full max-h-[420px] rounded-xl object-cover"
+                  className="w-full max-h-[420px] rounded-xl bg-muted p-2 object-contain"
                 />
               )}
               <MetadataPanel
@@ -659,6 +966,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                 servings={servings}
                 dietBadges={dietBadges}
                 allergenBadges={allergenBadges}
+                glutenSafetyWarning={glutenSafetyWarning}
                 loading={detailLoading}
               />
               <div className="space-y-4">
@@ -748,10 +1056,16 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On hand</p>
-                      {detailRecipe.usedIngredients && detailRecipe.usedIngredients.length > 0 ? (
+                      {detailInfo?.ingredientMatch?.have && detailInfo.ingredientMatch.have.length > 0 ? (
                         <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                          {detailRecipe.usedIngredients.map((ing) => (
+                          {detailInfo.ingredientMatch.have.map((ing) => (
                             <li key={`used-${ing.original}`}>{ing.original || ing.name}</li>
+                          ))}
+                        </ul>
+                      ) : detailInfo?.usedIngredients && detailInfo.usedIngredients.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                          {detailInfo.usedIngredients.map((ing) => (
+                            <li key={`used-fallback-${ing.original}`}>{ing.original || ing.name}</li>
                           ))}
                         </ul>
                       ) : (
@@ -760,10 +1074,16 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Still need</p>
-                      {detailRecipe.missedIngredients && detailRecipe.missedIngredients.length > 0 ? (
+                      {detailInfo?.ingredientMatch?.missing && detailInfo.ingredientMatch.missing.length > 0 ? (
                         <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                          {detailRecipe.missedIngredients.map((ing) => (
+                          {detailInfo.ingredientMatch.missing.map((ing) => (
                             <li key={`miss-${ing.original}`}>{ing.original || ing.name}</li>
+                          ))}
+                        </ul>
+                      ) : detailInfo?.missedIngredients && detailInfo.missedIngredients.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                          {detailInfo.missedIngredients.map((ing) => (
+                            <li key={`miss-fallback-${ing.original}`}>{ing.original || ing.name}</li>
                           ))}
                         </ul>
                       ) : (
@@ -1017,7 +1337,7 @@ function EmptyState() {
       <CardContent className="flex flex-col items-start gap-3 py-8">
         <CardTitle className="text-lg">No recipes yet</CardTitle>
         <CardDescription className="max-w-2xl">
-          Start with a keyword like “pasta” or a few ingredients like “tomato, basil, garlic”, or tap “I’m feeling
+          Start with a keyword like “pasta”, select ingredients from your kitchen inventory, or tap “I’m feeling
           hungry” for a random pick.
         </CardDescription>
       </CardContent>
@@ -1051,6 +1371,7 @@ function MetadataPanel({
   servings,
   dietBadges,
   allergenBadges,
+  glutenSafetyWarning,
   loading = false,
 }: {
   totalMinutes: number | null;
@@ -1059,6 +1380,7 @@ function MetadataPanel({
   servings: number | null;
   dietBadges: string[];
   allergenBadges: string[];
+  glutenSafetyWarning: { shouldWarn: boolean; matches: string[] };
   loading?: boolean;
 }) {
   const hasTiming = Boolean(totalMinutes || prepMinutes || cookMinutes || servings);
@@ -1093,14 +1415,29 @@ function MetadataPanel({
       ) : hasBadges ? (
         <div className={cn("flex flex-wrap gap-2 text-xs", hasTiming && "mt-2")}>
           {dietBadges.map((tag) => (
-            <Badge key={`diet-${tag}`} variant="outline" className="capitalize">
-              {tag}
-            </Badge>
+            <RecipeTagReferenceBadge
+              key={`diet-${tag}`}
+              tag={tag}
+              variant="outline"
+              warningTitle={
+                tag.toLowerCase() === "gluten free" && glutenSafetyWarning.shouldWarn
+                  ? "Gluten caution"
+                  : null
+              }
+              warningItems={
+                tag.toLowerCase() === "gluten free" && glutenSafetyWarning.shouldWarn
+                  ? glutenSafetyWarning.matches
+                  : []
+              }
+              warningNote={
+                tag.toLowerCase() === "gluten free" && glutenSafetyWarning.shouldWarn
+                  ? "Verify product labels for certified gluten-free versions."
+                  : null
+              }
+            />
           ))}
           {allergenBadges.map((tag) => (
-            <Badge key={`allergen-${tag}`} variant="secondary" className="capitalize">
-              {tag}
-            </Badge>
+            <RecipeTagReferenceBadge key={`allergen-${tag}`} tag={tag} variant="secondary" />
           ))}
         </div>
       ) : null}

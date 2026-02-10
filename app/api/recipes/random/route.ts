@@ -2,6 +2,14 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeRecipeResults } from "@/lib/recipes/search";
+import { attachIngredientMatch, sortRecipesByPantryMatch } from "@/lib/recipes/matching";
+import { loadUserRecipeContext } from "@/lib/recipes/preferences";
+import {
+  normalizeCuisineFilters,
+  normalizeDietFilters,
+  normalizeIntoleranceFilters,
+  parseCsvParam,
+} from "@/lib/recipes/spoonacular-filters";
 import { spoonacularFetch } from "@/lib/spoonacular/fetch";
 import { createClient } from "@/lib/supabase/server";
 import { buildSpoonacularUrl, getSpoonacularClient } from "@/lib/spoonacular/client";
@@ -25,48 +33,32 @@ export async function GET(req: NextRequest) {
     if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userContext = await loadUserRecipeContext(user.id);
 
     const urlParams = new URLSearchParams(req.nextUrl.searchParams);
     const number = Math.min(12, Math.max(1, Number(urlParams.get("number") ?? 6)));
 
-    const includeParam = urlParams.get("include-tags") ?? urlParams.get("include") ?? "";
-    const excludeParam = urlParams.get("exclude-tags") ?? urlParams.get("exclude") ?? "";
-    const dietParam = urlParams.get("diet") ?? "";
-    const intolerancesParam = urlParams.get("intolerances") ?? "";
-    const cuisineParam = urlParams.get("cuisine") ?? "";
-    const excludeCuisineParam = urlParams.get("excludeCuisine") ?? "";
-
-    const includeTags = (includeParam || "")
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .join(",");
-
-    const excludeTags = (excludeParam || "")
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .join(",");
+    const diets = normalizeDietFilters(parseCsvParam(urlParams.get("diet")));
+    const intolerances = normalizeIntoleranceFilters(parseCsvParam(urlParams.get("intolerances")));
+    const cuisines = normalizeCuisineFilters(parseCsvParam(urlParams.get("cuisine")));
+    const excludeCuisines = normalizeCuisineFilters(parseCsvParam(urlParams.get("excludeCuisine")));
 
     const useComplex =
-      !!dietParam ||
-      !!intolerancesParam ||
-      !!cuisineParam ||
-      !!excludeCuisineParam ||
-      !!includeTags ||
-      !!excludeTags;
+      diets.length > 0 ||
+      intolerances.length > 0 ||
+      cuisines.length > 0 ||
+      excludeCuisines.length > 0;
 
     if (useComplex) {
       const params = new URLSearchParams();
       params.set("number", String(number));
       params.set("sort", "random");
       params.set("addRecipeInformation", "true");
-      if (dietParam) params.set("diet", dietParam);
-      if (intolerancesParam) params.set("intolerances", intolerancesParam);
-      if (cuisineParam) params.set("cuisine", cuisineParam);
-      if (excludeCuisineParam) params.set("excludeCuisine", excludeCuisineParam);
-      if (includeTags) params.set("include-tags", includeTags);
-      if (excludeTags) params.set("exclude-tags", excludeTags);
+      params.set("fillIngredients", "true");
+      if (diets.length > 0) params.set("diet", diets.join(","));
+      if (intolerances.length > 0) params.set("intolerances", intolerances.join(","));
+      if (cuisines.length > 0) params.set("cuisine", cuisines.join(","));
+      if (excludeCuisines.length > 0) params.set("excludeCuisine", excludeCuisines.join(","));
 
       const url = buildSpoonacularUrl(client, "/recipes/complexSearch", params);
       const res = await spoonacularFetch(url, { headers: client.headers });
@@ -78,8 +70,9 @@ export async function GET(req: NextRequest) {
 
       const { results, totalResults } = normalizeRecipeResults("complexSearch", raw);
 
+      const matched = attachIngredientMatch(results, userContext.pantryItems);
       return NextResponse.json({
-        results,
+        results: sortRecipesByPantryMatch(matched),
         totalResults,
         cached: false,
       });
@@ -106,8 +99,9 @@ export async function GET(req: NextRequest) {
       totalResults: recipes.length,
     });
 
+    const matched = attachIngredientMatch(results, userContext.pantryItems);
     return NextResponse.json({
-      results,
+      results: sortRecipesByPantryMatch(matched),
       totalResults: results.length,
       cached: false,
     });

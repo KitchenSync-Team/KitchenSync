@@ -1,8 +1,19 @@
 import type { StandardizedRecipeDetails } from "./standardized";
 
 export type NormalizedIngredient = {
+  id?: number;
   name: string;
   original: string;
+};
+
+export type RecipeIngredientMatch = {
+  haveCount: number;
+  missingCount: number;
+  totalRequired: number;
+  coverage: number;
+  canMakeAll: boolean;
+  have: NormalizedIngredient[];
+  missing: NormalizedIngredient[];
 };
 
 export type NormalizedRecipe = {
@@ -20,6 +31,7 @@ export type NormalizedRecipe = {
   missedIngredientCount?: number;
   usedIngredients?: NormalizedIngredient[];
   missedIngredients?: NormalizedIngredient[];
+  ingredientMatch?: RecipeIngredientMatch;
   standardized?: StandardizedRecipeDetails | null;
 };
 
