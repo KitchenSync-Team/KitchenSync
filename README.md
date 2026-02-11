@@ -6,7 +6,7 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 
  - **Supabase-first auth & data** – Edge middleware plus `lib/domain/kitchen.ts` keep every protected route in sync with Supabase sessions and row-level security.
  - **Onboarding guardrails** – New members confirm profile details, dietary styles, allergens, communication prefs, and storage locations before reaching the dashboard.
- - **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, measurement units, and avatars (cropped + uploaded to S3/Supabase Storage).
+- **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, locale/theme preferences, and avatars (cropped + uploaded to S3/Supabase Storage).
  - **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
 
 ## V1 MVP Delivery Tracker
@@ -18,7 +18,7 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 - Ingredients workflow: search Spoonacular ingredients, map details, and add to inventory.
 - Recipes workflow: search, random discovery, pantry-aware matching, filters, and details dialogs.
 - Kitchen settings: rename kitchen, manage locations, and manage members/invites.
-- Profile & preferences: identity updates, avatar upload, communication toggles, dietary and cuisine preferences.
+- Profile & preferences: identity updates, avatar upload, communication toggles, dietary/cuisine preferences, and locale/theme preferences.
 - Deterministic kitchen bootstrap: backend now ensures a kitchen context exists before onboarding/protected app loads.
 
 ### Remaining For V1
