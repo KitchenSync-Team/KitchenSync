@@ -1348,7 +1348,7 @@ function buildNoResultsMessage({
   const normalizedQuery = query.trim().toLowerCase();
   const activeAllergenConflicts = detectAllergenQueryConflicts(normalizedQuery, selectedAllergens);
   const hasIngredientConstraints =
-    includeIngredients.length > 0 || typeof debugParams.includeIngredients === "string";
+    includeIngredients.length > 0 || debugParams.includeIngredients.trim().length > 0;
   const hasFilterConstraints =
     selectedDiets.length > 0 ||
     selectedAllergens.length > 0 ||

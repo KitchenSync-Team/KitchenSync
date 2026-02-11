@@ -429,11 +429,11 @@ function applyHardAllergenFilter(recipes: NormalizedRecipe[], allergens: string[
 
   return recipes.filter((recipe) => {
     const blobs: string[] = [];
-    if (typeof recipe.title === "string") blobs.push(recipe.title);
+    blobs.push(recipe.title);
     if (Array.isArray(recipe.extendedIngredients)) {
       for (const ing of recipe.extendedIngredients) {
-        if (typeof ing.name === "string") blobs.push(ing.name);
-        if (typeof ing.original === "string") blobs.push(ing.original);
+        blobs.push(ing.name);
+        blobs.push(ing.original);
       }
     }
     const text = blobs.join(" ").toLowerCase();
