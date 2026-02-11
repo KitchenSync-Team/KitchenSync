@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatInventoryItemName } from "@/lib/formatting/inventory";
+import { buildIngredientBadgePayload, formatDietBadgeLabel, hasStrictDietMatch } from "@/lib/ingredients/badges";
 import { filterUnitsByPossible } from "@/lib/units/filters";
 
 type LocationOption = { id: string; name: string; icon?: string | null };
@@ -32,6 +33,9 @@ export function AddIngredientSheet({
     imageUrl?: string;
     aisle?: string;
     possibleUnits?: string[];
+    dietBadges?: string[];
+    dietFilters?: string[];
+    strictDiet?: boolean;
   } | null;
   kitchenId: string;
   locations: LocationOption[];
@@ -91,6 +95,12 @@ export function AddIngredientSheet({
       setError("Enter a valid quantity.");
       return;
     }
+    if (selection?.strictDiet && (selection.dietFilters?.length ?? 0) > 0) {
+      if (!hasStrictDietMatch(selection.dietBadges ?? [], selection.dietFilters ?? [])) {
+        setError("This ingredient does not explicitly match your selected diet filters.");
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -111,6 +121,7 @@ export function AddIngredientSheet({
           imageUrl: selection.imageUrl ?? undefined,
           aisle: selection.aisle ?? undefined,
           possibleUnits: selection.possibleUnits ?? suggestedUnits,
+          badges: buildIngredientBadgePayload(selection.dietBadges ?? []),
         }),
       });
       const data = (await res.json()) as Record<string, unknown>;
@@ -152,6 +163,15 @@ export function AddIngredientSheet({
           <div className="space-y-2">
             <Label>Name</Label>
             <Input value={formattedName} readOnly />
+            {(selection?.dietBadges?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {(selection?.dietBadges ?? []).slice(0, 3).map((badge) => (
+                  <span key={badge} className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                    {formatDietBadgeLabel(badge)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">

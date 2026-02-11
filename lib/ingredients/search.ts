@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
 import { readRecipeCache, writeRecipeCache } from "@/lib/cache/recipe-cache";
+import { deriveIngredientDietBadges, normalizeDietFilterKeys } from "@/lib/ingredients/badges";
 
 import type { IngredientSearchResponse, IngredientSearchResult } from "./types";
 
@@ -15,12 +16,16 @@ export async function searchIngredients({
   limit = 12,
   offset = 0,
   intolerances = [],
+  dietFilters = [],
+  strictDiet = false,
   client,
 }: {
   query: string;
   limit?: number;
   offset?: number;
   intolerances?: string[];
+  dietFilters?: string[];
+  strictDiet?: boolean;
   client: SpoonacularClient;
 }): Promise<{ url: string; cacheKey: string; headers: Record<string, string> }> {
   const params = new URLSearchParams();
@@ -34,7 +39,14 @@ export async function searchIngredients({
   }
 
   const url = buildSpoonacularUrl(client, "/food/ingredients/search", params);
-  const rawCacheKey = JSON.stringify({ query, limit, offset, intolerances });
+  const rawCacheKey = JSON.stringify({
+    query,
+    limit,
+    offset,
+    intolerances: intolerances.map((value) => value.trim().toLowerCase()).sort(),
+    dietFilters: normalizeDietFilterKeys(dietFilters),
+    strictDiet,
+  });
   const cacheKey = `ingredients:${hashKey(rawCacheKey)}`;
 
   return { url, cacheKey, headers: client.headers };
@@ -43,22 +55,47 @@ export async function searchIngredients({
 export function normalizeIngredientSearch(
   data: unknown,
   appliedIntolerances: string[],
+  appliedDietFilters: string[] = [],
+  strictDiet = false,
   cacheKey?: string,
 ): IngredientSearchResponse {
   const payload = (data ?? {}) as SpoonacularIngredientSearch;
   const rows = Array.isArray(payload.results) ? payload.results : [];
-  const results: IngredientSearchResult[] = rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    image: normalizeImage(row.image),
-    aisle: row.aisle ?? null,
-  }));
+  const normalizedDietFilters = normalizeDietFilterKeys(appliedDietFilters);
+
+  const resultRows: IngredientSearchResult[] = rows.map((row) => {
+    const dietBadges = deriveIngredientDietBadges({ name: row.name, aisle: row.aisle ?? null });
+    const dietMatch =
+      normalizedDietFilters.length === 0 || normalizedDietFilters.every((token) => dietBadges.includes(token))
+        ? "match"
+        : "unknown";
+    return {
+      id: row.id,
+      name: row.name,
+      image: normalizeImage(row.image),
+      aisle: row.aisle ?? null,
+      dietBadges,
+      dietMatch,
+    };
+  });
+
+  const sorted = resultRows.sort((a, b) => {
+    const scoreA = a.dietMatch === "match" ? 1 : 0;
+    const scoreB = b.dietMatch === "match" ? 1 : 0;
+    return scoreB - scoreA;
+  });
+
+  const results = strictDiet && normalizedDietFilters.length > 0
+    ? sorted.filter((row) => row.dietMatch === "match")
+    : sorted;
 
   return {
     results,
     totalResults: typeof payload.totalResults === "number" ? payload.totalResults : results.length,
     cached: false,
     appliedIntolerances,
+    appliedDietFilters: normalizedDietFilters,
+    strictDiet,
     cacheKey,
   };
 }
@@ -71,6 +108,8 @@ export async function readIngredientCache(cacheKey: string) {
 export function normalizeCachedIngredients(
   cached: unknown,
   appliedIntolerances: string[],
+  appliedDietFilters: string[] = [],
+  strictDiet = false,
   cacheKey: string,
 ): IngredientSearchResponse {
   if (!cached || typeof cached !== "object") {
@@ -79,6 +118,8 @@ export function normalizeCachedIngredients(
       totalResults: 0,
       cached: true,
       appliedIntolerances,
+      appliedDietFilters: normalizeDietFilterKeys(appliedDietFilters),
+      strictDiet,
       cacheKey,
     };
   }
@@ -92,6 +133,10 @@ export function normalizeCachedIngredients(
         id: entry.id,
         name: entry.name,
         image: normalizeImage(entry.image),
+        dietBadges: Array.isArray(entry.dietBadges)
+          ? entry.dietBadges.filter((value): value is string => typeof value === "string")
+          : [],
+        dietMatch: entry.dietMatch === "match" ? "match" : "unknown",
       };
       if (entry.aisle !== undefined) {
         result.aisle = entry.aisle ?? null;
@@ -104,6 +149,13 @@ export function normalizeCachedIngredients(
     totalResults: typeof payload.totalResults === "number" ? payload.totalResults : 0,
     cached: true,
     appliedIntolerances: appliedIntolerances ?? payload.appliedIntolerances ?? [],
+    appliedDietFilters: normalizeDietFilterKeys(
+      appliedDietFilters ??
+        (Array.isArray(payload.appliedDietFilters)
+          ? payload.appliedDietFilters.filter((value): value is string => typeof value === "string")
+          : []),
+    ),
+    strictDiet: strictDiet ?? payload.strictDiet ?? false,
     cacheKey: payload.cacheKey ?? cacheKey,
   };
 }

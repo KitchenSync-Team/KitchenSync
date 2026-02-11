@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { formatInventoryExpiry, formatInventoryItemName, formatQuantityWithUnit } from "@/lib/formatting/inventory";
+import { formatDietBadgeLabel } from "@/lib/ingredients/badges";
 import { getIngredientFallbackIcon } from "@/lib/ingredients/icon";
 import { cn } from "@/lib/supabase/utils";
 
@@ -11,6 +13,7 @@ type InventoryIngredientCardProps = {
   name: string;
   imageUrl: string | null;
   aisle?: string | null;
+  dietBadges?: string[];
   quantity: number;
   unit: string | null;
   expiresAt: string | null;
@@ -27,6 +30,7 @@ export function InventoryIngredientCard({
   name,
   imageUrl,
   aisle,
+  dietBadges = [],
   quantity,
   unit,
   expiresAt,
@@ -73,6 +77,15 @@ export function InventoryIngredientCard({
       <CardContent className={cn("flex h-full flex-col gap-2 p-4", contentClassName)}>
         <div className="space-y-1">
           <p className="line-clamp-2 text-sm font-semibold">{displayName}</p>
+          {dietBadges.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {dietBadges.slice(0, 2).map((badge) => (
+                <Badge key={`${displayName}-${badge}`} variant="outline" className="text-[10px]">
+                  {formatDietBadgeLabel(badge)}
+                </Badge>
+              ))}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">{formatQuantityWithUnit(quantity, unit)}</p>
           <p className="text-xs text-muted-foreground">Expires {formatInventoryExpiry(expiresAt)}</p>
         </div>

@@ -67,11 +67,11 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const [pantryError, setPantryError] = useState<string | null>(null);
   const [pantryFilter, setPantryFilter] = useState("");
   const [selectedPantryItemIds, setSelectedPantryItemIds] = useState<string[]>([]);
-  const [usePantry, setUsePantry] = useState(true);
   const [ignorePreferences, setIgnorePreferences] = useState(false);
   const [maxReadyTime, setMaxReadyTime] = useState<string>("");
   const [sort, setSort] = useState<string>("max-used-ingredients");
   const [results, setResults] = useState<NormalizedRecipe[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [meta, setMeta] = useState<SearchMeta | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -216,9 +216,9 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     setSelectedDislikes([]);
     setMaxReadyTime("");
     setSort("max-used-ingredients");
-    setUsePantry(true);
     setIgnorePreferences(false);
     setSelectedPantryItemIds([]);
+    setHasSearched(false);
   };
 
   const resetFiltersToProfile = () => {
@@ -381,6 +381,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   async function runSearch() {
     setLoading(true);
     setError(null);
+    setHasSearched(true);
     prefetchAbortRef.current.generation += 1;
 
     const queryValue = trimmedQuery;
@@ -392,8 +393,8 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
       ),
     );
 
-    if (!queryValue && includeIngredients.length === 0 && !usePantry) {
-      setError("Add a keyword or select kitchen ingredients to search.");
+    if (!queryValue && includeIngredients.length === 0) {
+      setError("Add a keyword or select ingredients to search.");
       setLoading(false);
       return;
     }
@@ -407,7 +408,8 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
           includeIngredients,
           maxReadyTime: parsedMaxReadyTime,
           sort,
-          usePantry,
+          usePantry: true,
+          debug: true,
           ignorePreferences,
           diet: selectedDiets,
           allergens: selectedAllergens,
@@ -432,37 +434,22 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
         return;
       }
 
-      let nextResults = Array.isArray(data.results) ? data.results : [];
+      const nextResults = Array.isArray(data.results) ? data.results : [];
 
-      // Last-resort fallback for exact keyword lookups:
-      // retry with only the query so hidden filter state cannot zero out results.
-      if (nextResults.length === 0 && queryValue) {
-        try {
-          const queryOnlyRes = await fetch("/api/recipes/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: queryValue,
-              includeIngredients: [],
-              usePantry: false,
-              ignorePreferences: true,
-              diet: [],
-              allergens: [],
-              cuisineLikes: [],
-              cuisineDislikes: [],
-              useCuisineLikes: false,
-              applyDiet: false,
-              applyAllergens: false,
-              applyCuisineDislikes: false,
-            }),
-          });
-          const queryOnlyData = (await queryOnlyRes.json()) as Partial<RecipeSearchResponse> & Record<string, unknown>;
-          if (queryOnlyRes.ok && Array.isArray(queryOnlyData.results)) {
-            nextResults = queryOnlyData.results;
-          }
-        } catch {
-          // keep original empty state if query-only retry fails
-        }
+      if (nextResults.length === 0) {
+        const debug = data && typeof data === "object" && "debug" in data
+          ? (data.debug as { final?: { params?: Record<string, string> } } | undefined)
+          : undefined;
+        const message = buildNoResultsMessage({
+          query: queryValue,
+          includeIngredients,
+          selectedDiets,
+          selectedAllergens,
+          selectedLikes,
+          selectedDislikes,
+          debugParams: debug?.final?.params ?? {},
+        });
+        setError(message);
       }
 
       setResults(nextResults);
@@ -485,7 +472,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
           includeCuisines: selectedLikes,
           excludeCuisines: selectedDislikes,
           personalizationSkipped: !preferences.personalizationOptIn || ignorePreferences,
-          usedPantryItems: usePantry ? [] : [],
+          usedPantryItems: [],
         },
       });
     } catch (err) {
@@ -499,6 +486,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   async function runHungry() {
     setHungryLoading(true);
     setError(null);
+    setHasSearched(true);
     prefetchAbortRef.current.generation += 1;
 
     const hasActiveRandomFilters =
@@ -545,9 +533,15 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
 
       if (nextResults.length === 0) {
         setError(
-          hasActiveRandomFilters
-            ? "No recipes matched your current filters. Loosen diet/allergen/cuisine filters and try again."
-            : "No recipes right now. Try again or loosen the filters.",
+          buildNoResultsMessage({
+            query: "",
+            includeIngredients: [],
+            selectedDiets,
+            selectedAllergens,
+            selectedLikes,
+            selectedDislikes,
+            debugParams: {},
+          }),
         );
       }
 
@@ -568,7 +562,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
           includeCuisines: nextResults.length > 0 ? selectedLikes : [],
           excludeCuisines: nextResults.length > 0 ? selectedDislikes : [],
           personalizationSkipped: ignorePreferences,
-          usedPantryItems: usePantry ? [] : [],
+          usedPantryItems: [],
         },
       });
     } catch (err) {
@@ -645,18 +639,10 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
 
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label className="text-sm">Ingredient scope</Label>
-                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">
-                        {selectedPantryItems.length > 0
-                          ? "Also include all kitchen items"
-                          : "Include all kitchen items"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Broaden results with your full kitchen inventory.</p>
-                    </div>
-                    <Switch id="use-pantry" checked={usePantry} onCheckedChange={setUsePantry} />
-                  </div>
+                  <p className="text-sm font-medium">Pantry matching</p>
+                  <p className="text-xs text-muted-foreground">
+                    On-hand vs missing is always included in ranking.
+                  </p>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
@@ -847,7 +833,18 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
             </div>
           </div>
         ) : (
-          <EmptyState />
+          <EmptyState
+            hasSearched={hasSearched}
+            query={trimmedQuery}
+            selectedIngredientCount={selectedPantryItems.length}
+            activeFilterCount={
+              selectedDiets.length +
+              selectedAllergens.length +
+              selectedLikes.length +
+              selectedDislikes.length +
+              (maxReadyTime.trim() ? 1 : 0)
+            }
+          />
         )}
       </div>
 
@@ -1331,15 +1328,103 @@ function CuisineGroup({
   );
 }
 
-function EmptyState() {
+function buildNoResultsMessage({
+  query,
+  includeIngredients,
+  selectedDiets,
+  selectedAllergens,
+  selectedLikes,
+  selectedDislikes,
+  debugParams,
+}: {
+  query: string;
+  includeIngredients: string[];
+  selectedDiets: string[];
+  selectedAllergens: string[];
+  selectedLikes: string[];
+  selectedDislikes: string[];
+  debugParams: Record<string, string>;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const activeAllergenConflicts = detectAllergenQueryConflicts(normalizedQuery, selectedAllergens);
+  const hasIngredientConstraints =
+    includeIngredients.length > 0 || debugParams.includeIngredients.trim().length > 0;
+  const hasFilterConstraints =
+    selectedDiets.length > 0 ||
+    selectedAllergens.length > 0 ||
+    selectedLikes.length > 0 ||
+    selectedDislikes.length > 0;
+
+  if (activeAllergenConflicts.length > 0) {
+    const listed = activeAllergenConflicts.join(", ");
+    if (query.trim().length > 0) {
+      return `No recipes found. Your search for "${query.trim()}" conflicts with your ${listed} allergen filter. Try a different keyword, or remove that allergen filter and search again.`;
+    }
+    return `No recipes found. Your active allergen filter (${listed}) is very restrictive. Try removing one allergen filter and search again.`;
+  }
+
+  if (hasIngredientConstraints && hasFilterConstraints) {
+    return "No recipes found. Your selected ingredients and filters are too restrictive together. Try removing one ingredient or loosening one filter.";
+  }
+  if (hasIngredientConstraints) {
+    return "No recipes found. Your selected ingredients are too specific. Try selecting fewer ingredients or using a broader ingredient.";
+  }
+  if (hasFilterConstraints) {
+    return "No recipes found. Your active filters are too restrictive. Try removing one filter and search again.";
+  }
+  if (query.trim().length > 0) {
+    return `No recipes found for "${query.trim()}". Try a broader keyword and search again.`;
+  }
+  return "No recipes found. Try adding a keyword or selecting ingredients.";
+}
+
+function detectAllergenQueryConflicts(query: string, allergens: string[]): string[] {
+  if (!query) return [];
+  const normalized = allergens.map((value) => value.trim().toLowerCase());
+  const conflicts: string[] = [];
+
+  if (normalized.includes("eggs") && /\begg(s)?\b|\bmayo\b|\bmayonnaise\b/.test(query)) conflicts.push("egg");
+  if (normalized.includes("peanuts") && /\bpeanut(s)?\b|\bpeanut butter\b/.test(query)) conflicts.push("peanut");
+  if (normalized.includes("tree_nuts") && /\bnut(s)?\b|\balmond(s)?\b|\bcashew(s)?\b|\bwalnut(s)?\b/.test(query)) {
+    conflicts.push("tree nuts");
+  }
+  if (normalized.includes("dairy") && /\bcheese\b|\bmilk\b|\bbutter\b|\bcream\b|\byogurt\b/.test(query)) {
+    conflicts.push("dairy");
+  }
+  if (normalized.includes("soy") && /\bsoy\b|\btofu\b|\btempeh\b|\bedamame\b/.test(query)) conflicts.push("soy");
+  if (normalized.includes("wheat") && /\bwheat\b|\bbread\b|\bflour\b|\bpasta\b/.test(query)) conflicts.push("wheat");
+  if (normalized.includes("sesame") && /\bsesame\b|\btahini\b/.test(query)) conflicts.push("sesame");
+  if (normalized.includes("shellfish") && /\bshrimp\b|\bcrab\b|\blobster\b|\bclam\b|\boyster\b/.test(query)) {
+    conflicts.push("shellfish");
+  }
+
+  return conflicts;
+}
+
+function EmptyState({
+  hasSearched,
+  query,
+  selectedIngredientCount,
+  activeFilterCount,
+}: {
+  hasSearched: boolean;
+  query: string;
+  selectedIngredientCount: number;
+  activeFilterCount: number;
+}) {
+  const hasConstraints = selectedIngredientCount > 0 || activeFilterCount > 0 || query.trim().length > 0;
+  const title = hasSearched ? "No recipes found" : "Find recipes";
+  const message = hasSearched
+    ? hasConstraints
+      ? "Try a broader keyword, fewer selected ingredients, or fewer filters and search again."
+      : "Try adding a keyword or selecting ingredients and search again."
+    : "Start with a keyword like \"pasta\", select ingredients from your kitchen inventory, or tap \"I'm feeling hungry\" for a random pick.";
+
   return (
     <Card className="border-dashed">
       <CardContent className="flex flex-col items-start gap-3 py-8">
-        <CardTitle className="text-lg">No recipes yet</CardTitle>
-        <CardDescription className="max-w-2xl">
-          Start with a keyword like “pasta”, select ingredients from your kitchen inventory, or tap “I’m feeling
-          hungry” for a random pick.
-        </CardDescription>
+        <CardTitle className="text-lg">{title}</CardTitle>
+        <CardDescription className="max-w-2xl">{message}</CardDescription>
       </CardContent>
     </Card>
   );

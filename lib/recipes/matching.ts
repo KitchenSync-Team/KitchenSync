@@ -134,7 +134,7 @@ function normalizeIngredientName(value: string): string {
 
 function hasIngredientIdMatch(
   ingredientId: number | undefined,
-  ingredientNameCandidates: string[],
+  _ingredientNameCandidates: string[],
   pantryIdToNames: Map<number, Set<string>>,
 ) {
   if (typeof ingredientId !== "number" || !Number.isFinite(ingredientId)) return false;
@@ -142,12 +142,9 @@ function hasIngredientIdMatch(
   for (const id of idsToCheck) {
     const pantryNames = pantryIdToNames.get(id);
     if (!pantryNames) continue;
-    // Exact id match is always valid.
+    // Exact id and Spoonacular-prefixed variant ids are treated as the same ingredient family.
     if (id === ingredientId) return true;
-    // Variant id match needs loose lexical overlap to avoid false positives.
-    if (ingredientNameCandidates.some((candidate) => hasNameOverlap(candidate, pantryNames))) {
-      return true;
-    }
+    return true;
   }
   return false;
 }
@@ -162,15 +159,6 @@ function buildVariantIdCandidates(id: number): number[] {
     if (Number.isFinite(stripThree) && stripThree > 0) candidates.add(stripThree);
   }
   return Array.from(candidates);
-}
-
-function hasNameOverlap(candidate: string, pantryNames: Set<string>) {
-  if (pantryNames.has(candidate)) return true;
-  for (const pantryName of pantryNames) {
-    if (!candidate || !pantryName) continue;
-    if (candidate.includes(pantryName) || pantryName.includes(candidate)) return true;
-  }
-  return false;
 }
 
 function expandNameCandidates(name: string): string[] {
@@ -254,6 +242,18 @@ function expandNameCandidates(name: string): string[] {
   addAlias(candidates, name, /\bgreen onions?\b/g, "scallion");
   addAlias(candidates, name, /\bscallions?\b/g, "green onion");
   addAlias(candidates, name, /\bgarlic cloves?\b/g, "garlic");
+
+  // Pasta variants.
+  addAlias(candidates, name, /\bgluten free pasta\b/g, "gluten free fusilli");
+  addAlias(candidates, name, /\bgluten free pasta\b/g, "fusilli");
+  addAlias(candidates, name, /\bgluten free fusilli\b/g, "gluten free pasta");
+  addAlias(candidates, name, /\bgluten free spaghetti\b/g, "gluten free pasta");
+  addAlias(candidates, name, /\bgluten free penne\b/g, "gluten free pasta");
+  addAlias(candidates, name, /\bfusilli\b/g, "pasta");
+  addAlias(candidates, name, /\bspaghetti\b/g, "pasta");
+  addAlias(candidates, name, /\bpenne\b/g, "pasta");
+  addAlias(candidates, name, /\bmacaroni\b/g, "pasta");
+  addAlias(candidates, name, /\bnoodles?\b/g, "pasta");
 
   // Remove common preparation/modifier words to get a simpler core ingredient phrase.
   const simplified = collapseSpaces(

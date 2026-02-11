@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { IngredientSearchResponse, IngredientSearchResult } from "@/lib/ingredients/types";
+import { normalizeDietFilterKeys } from "@/lib/ingredients/badges";
 import type { UserPreferencesSummary } from "@/lib/domain/kitchen";
 
 type LocationOption = { id: string; name: string; icon?: string | null };
@@ -43,6 +44,7 @@ export function IngredientClient({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<IngredientSearchResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<IngredientSearchResult | null>(null);
@@ -52,8 +54,12 @@ export function IngredientClient({
     possibleUnits?: string[];
     image?: string | null;
     aisle?: string | null;
+    dietBadges?: string[];
     nutrition?: unknown;
   }>({});
+  const [dietFilters, setDietFilters] = useState<string[]>(
+    normalizeDietFilterKeys(preferences.dietaryPreferences ?? []),
+  );
 
   const allergenMap = useMemo(
     () => Object.fromEntries(ALLERGEN_OPTIONS.map((option) => [option.value, option.label])),
@@ -73,6 +79,7 @@ export function IngredientClient({
       setError("Enter an ingredient to search.");
       return;
     }
+    setHasSearched(true);
     setLoading(true);
     setError(null);
     setCached(false);
@@ -80,7 +87,11 @@ export function IngredientClient({
       const res = await fetch("/api/ingredients/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({
+          query: query.trim(),
+          dietFilters,
+          strictDiet: dietFilters.length > 0,
+        }),
       });
       const data = (await res.json()) as Partial<IngredientSearchResponse> & Record<string, unknown>;
       if (!res.ok) {
@@ -121,7 +132,10 @@ export function IngredientClient({
               id="ingredient-query"
               placeholder="tomato, basil, almond milk..."
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setHasSearched(false);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -148,6 +162,38 @@ export function IngredientClient({
               </Badge>
             )}
           </div>
+        </CardContent>
+        <CardContent className="pt-0">
+          <div className="flex flex-wrap gap-2">
+            {DIETARY_OPTIONS.map((option) => {
+              const active = dietFilters.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    setDietFilters((current) =>
+                      current.includes(option.value)
+                        ? current.filter((value) => value !== option.value)
+                        : [...current, option.value],
+                    )
+                  }
+                  className={
+                    active
+                      ? "rounded-full border border-primary bg-primary/10 px-2 py-1 text-xs text-primary"
+                      : "rounded-full border px-2 py-1 text-xs text-muted-foreground"
+                  }
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          {dietFilters.length > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Diet filters are strict. Only explicit matches are shown.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -190,6 +236,11 @@ export function IngredientClient({
                             (value): value is string => typeof value === "string",
                           )
                         : undefined,
+                      dietBadges: Array.isArray(data.dietBadges)
+                        ? (data.dietBadges as unknown[]).filter(
+                            (value): value is string => typeof value === "string",
+                          )
+                        : ingredient.dietBadges,
                       image: typeof data.image === "string" ? data.image : ingredient.image,
                       aisle: typeof data.aisle === "string" ? data.aisle : ingredient.aisle,
                       nutrition: data.nutrition,
@@ -203,7 +254,7 @@ export function IngredientClient({
           ))}
         </div>
       ) : (
-        <EmptyState />
+        <EmptyState query={query} searched={hasSearched} />
       )}
 
       <RecentList entries={recent} />
@@ -220,6 +271,9 @@ export function IngredientClient({
                 imageUrl: selectedDetail.image ?? selected.image ?? undefined,
                 aisle: selectedDetail.aisle ?? selected.aisle ?? undefined,
                 possibleUnits: selectedDetail.possibleUnits,
+                dietBadges: selectedDetail.dietBadges ?? selected.dietBadges,
+                dietFilters,
+                strictDiet: dietFilters.length > 0,
               }
             : null
         }
@@ -297,14 +351,18 @@ function PreferenceBadges({
   );
 }
 
-function EmptyState() {
+function EmptyState({ searched, query }: { searched: boolean; query: string }) {
   return (
     <Card className="border-dashed">
       <CardContent className="flex flex-col gap-3 py-8">
         <Badge variant="outline">Ingredients</Badge>
-        <CardTitle className="text-lg">Search ingredients to add to your kitchen</CardTitle>
+        <CardTitle className="text-lg">
+          {searched ? "No ingredients found" : "Search ingredients to add to your kitchen"}
+        </CardTitle>
         <CardDescription className="max-w-2xl">
-          Find pantry staples or produce, then add them directly to your kitchen locations with quantity and expiration.
+          {searched
+            ? `No results found for "${query.trim()}". Try a broader term or remove diet filters.`
+            : "Find pantry staples or produce, then add them directly to your kitchen locations with quantity and expiration."}
         </CardDescription>
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">Uses preferences</Badge>

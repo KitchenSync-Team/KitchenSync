@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { buildSpoonacularUrl, type SpoonacularClient } from "@/lib/spoonacular/client";
 import { readRecipeCache, writeRecipeCache } from "@/lib/cache/recipe-cache";
+import { deriveIngredientDietBadges } from "@/lib/ingredients/badges";
 
 type SpoonacularIngredientInfo = {
   id?: number;
@@ -18,6 +19,7 @@ export type IngredientInfo = {
   aisle: string | null;
   image: string | null;
   possibleUnits: string[];
+  dietBadges: string[];
   nutrition?: unknown;
   cacheKey?: string;
 };
@@ -43,6 +45,10 @@ export function normalizeIngredientInfo(data: unknown, cacheKey?: string): Ingre
           .map((unit) => unit.trim())
           .filter((unit) => unit.length > 0)
       : [],
+    dietBadges: deriveIngredientDietBadges({
+      name: payload.name,
+      aisle: typeof payload.aisle === "string" ? payload.aisle : null,
+    }),
     nutrition: payload.nutrition ?? undefined,
     cacheKey,
   };
@@ -65,6 +71,9 @@ export function normalizeCachedIngredientInfo(
     aisle: payload.aisle ?? null,
     image: payload.image ?? null,
     possibleUnits: Array.isArray(payload.possibleUnits) ? payload.possibleUnits : [],
+    dietBadges: Array.isArray(payload.dietBadges)
+      ? payload.dietBadges.filter((value): value is string => typeof value === "string")
+      : [],
     nutrition: payload.nutrition ?? undefined,
     cacheKey: payload.cacheKey ?? cacheKey,
   };
