@@ -11,8 +11,8 @@ import {
   Fish,
   Home,
   Milk,
+  Package,
   Refrigerator,
-  ShoppingBasket,
   Snowflake,
   Sprout,
   Table,
@@ -39,7 +39,7 @@ const STORAGE_ICON_CHOICES: IconChoice[] = [
   { value: "snowflake", label: "Freezer", Icon: Snowflake },
   { value: "table", label: "Counter", Icon: Table },
   { value: "warehouse", label: "Garage", Icon: Warehouse },
-  { value: "shopping-basket", label: "Supplies", Icon: ShoppingBasket },
+  { value: "package", label: "Supplies", Icon: Package },
   { value: "utensils", label: "Serveware", Icon: Utensils },
 ];
 

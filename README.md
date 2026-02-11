@@ -9,6 +9,24 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
  - **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, measurement units, and avatars (cropped + uploaded to S3/Supabase Storage).
  - **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
 
+## V1 MVP Delivery Tracker
+
+### Completed
+- Auth flows: sign up, login, password reset/update, protected routing.
+- Guided onboarding: profile capture, dietary/allergen/cuisine prefs, kitchen naming, location setup.
+- Inventory management: add/edit/consume inventory entries with location and unit support.
+- Ingredients workflow: search Spoonacular ingredients, map details, and add to inventory.
+- Recipes workflow: search, random discovery, pantry-aware matching, filters, and details dialogs.
+- Kitchen settings: rename kitchen, manage locations, and manage members/invites.
+- Profile & preferences: identity updates, avatar upload, communication toggles, dietary and cuisine preferences.
+
+### Remaining For V1
+- Build the main `/protected` dashboard (current route is a placeholder).
+- Replace notification bell mock data with real alert-driven data.
+- Ship invite acceptance/join flow (mark accepted invites and add memberships).
+- Confirm deterministic kitchen bootstrap for new users in app-layer flow.
+- Add canonical schema + RLS migrations for full reproducibility (current migration set is minimal).
+
 ## Recipes experience
 
 - `/protected/recipes` uses a two-column layout: filters on the left; search bar + “Search” and “I’m feeling hungry” on top of results.
