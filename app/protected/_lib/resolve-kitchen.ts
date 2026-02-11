@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { ensureKitchenContext } from "@/lib/domain/kitchen-bootstrap";
 import {
   MissingKitchenError,
   loadKitchenData,
@@ -18,6 +19,7 @@ export async function resolveKitchen() {
   }
 
   try {
+    await ensureKitchenContext(supabase, user);
     const kitchenSnapshot = await loadKitchenData(supabase, user.id);
 
     if (!kitchenSnapshot.user.onboardingComplete) {

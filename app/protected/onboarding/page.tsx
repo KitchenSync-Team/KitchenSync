@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { ensureKitchenContext } from "@/lib/domain/kitchen-bootstrap";
 import { MissingKitchenError, loadKitchenData } from "@/lib/domain/kitchen";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +17,8 @@ export default async function OnboardingPage() {
   if (error || !user) {
     redirect("/auth/login");
   }
+
+  await ensureKitchenContext(supabase, user);
 
   let kitchenData = null;
 

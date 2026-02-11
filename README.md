@@ -19,12 +19,12 @@ KitchenSync helps households and shared kitchens stay on top of pantry inventory
 - Recipes workflow: search, random discovery, pantry-aware matching, filters, and details dialogs.
 - Kitchen settings: rename kitchen, manage locations, and manage members/invites.
 - Profile & preferences: identity updates, avatar upload, communication toggles, dietary and cuisine preferences.
+- Deterministic kitchen bootstrap: backend now ensures a kitchen context exists before onboarding/protected app loads.
 
 ### Remaining For V1
 - Build the main `/protected` dashboard (current route is a placeholder).
 - Replace notification bell mock data with real alert-driven data.
 - Ship invite acceptance/join flow (mark accepted invites and add memberships).
-- Confirm deterministic kitchen bootstrap for new users in app-layer flow.
 - Add canonical schema + RLS migrations for full reproducibility (current migration set is minimal).
 
 ## Recipes experience

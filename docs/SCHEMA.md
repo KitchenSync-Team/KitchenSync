@@ -69,6 +69,26 @@ When adding new service-role usage, always:
 - Check membership/ownership in `kitchen_members`.
 - Avoid trusting user-supplied kitchen IDs without validation.
 
+## Kitchen Bootstrap Flow (App Layer)
+
+To make new-user onboarding deterministic, the app now ensures a kitchen context
+exists before protected/onboarding routes load kitchen data.
+
+Implementation:
+- `lib/domain/kitchen-bootstrap.ts` exports `ensureKitchenContext(...)`.
+- `app/protected/_lib/resolve-kitchen.ts` calls this helper before `loadKitchenData(...)`.
+- `app/protected/onboarding/page.tsx` also calls this helper before loading onboarding data.
+
+Bootstrap behavior:
+- If `user_preferences.default_kitchen_id` or a `kitchen_members` row exists, use it.
+- Ensure `kitchen_members (kitchen_id, user_id)` exists (idempotent upsert).
+- Ensure `user_preferences.default_kitchen_id` is set (idempotent upsert).
+- If no kitchen exists, create a kitchen, create owner membership, then set default kitchen.
+
+This keeps onboarding focused on configuration (profile/preferences/locations)
+instead of first-time kitchen creation and prevents users from landing in a
+“no kitchen found” dead end due to missing external triggers.
+
 ## Known Gaps
 
 - Migrations in `supabase/migrations/` are minimal and do not fully define the schema.
