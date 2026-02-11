@@ -3,6 +3,8 @@ export type IngredientSearchResult = {
   name: string;
   image: string | null;
   aisle?: string | null;
+  dietBadges?: string[];
+  dietMatch?: "match" | "unknown";
 };
 
 export type IngredientSearchResponse = {
@@ -10,6 +12,8 @@ export type IngredientSearchResponse = {
   totalResults: number;
   cached: boolean;
   appliedIntolerances: string[];
+  appliedDietFilters?: string[];
+  strictDiet?: boolean;
   cacheKey?: string;
 };
 

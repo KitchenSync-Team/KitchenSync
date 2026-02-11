@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 
 import type { IngredientSearchResult } from "@/lib/ingredients/types";
 import { formatInventoryItemName } from "@/lib/formatting/inventory";
+import { formatDietBadgeLabel } from "@/lib/ingredients/badges";
 import { getIngredientFallbackIcon } from "@/lib/ingredients/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,19 @@ export function IngredientCard({
         <CardTitle className="line-clamp-2 text-base">{formatInventoryItemName(ingredient.name)}</CardTitle>
         <div className="flex flex-wrap gap-2 text-xs">
           {ingredient.aisle && <Badge variant="outline">{ingredient.aisle}</Badge>}
+          {(ingredient.dietBadges ?? []).slice(0, 2).map((badge) => (
+            <Badge key={`${ingredient.id}-${badge}`} variant="outline">
+              {formatDietBadgeLabel(badge)}
+            </Badge>
+          ))}
+          {ingredient.dietMatch && (
+            <Badge
+              variant={ingredient.dietMatch === "match" ? "secondary" : "outline"}
+              className={ingredient.dietMatch === "match" ? "border-emerald-300 text-emerald-800" : ""}
+            >
+              {ingredient.dietMatch === "match" ? "Diet match" : "Unverified"}
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="mt-auto flex justify-end pb-4">

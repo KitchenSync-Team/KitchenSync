@@ -47,6 +47,20 @@ export async function POST(req: NextRequest) {
       if (existingErr) console.error("ingredients_catalog lookup error:", existingErr);
       if (existing?.id) {
         ingredientCatalogId = existing.id;
+        const { error: updateCatalogError } = await admin
+          .from("ingredients_catalog")
+          .update({
+            name: payload.name,
+            brand: payload.brand ?? null,
+            aisle: payload.aisle ?? null,
+            category: payload.category ?? null,
+            image_url: payload.imageUrl ?? null,
+            possible_units: payload.possibleUnits ?? null,
+            badges: payload.badges ?? null,
+            raw: payload.raw ?? null,
+          })
+          .eq("id", existing.id);
+        if (updateCatalogError) console.error("ingredients_catalog update error:", updateCatalogError);
       } else {
         const { data: inserted, error: insertErr } = await admin
           .from("ingredients_catalog")

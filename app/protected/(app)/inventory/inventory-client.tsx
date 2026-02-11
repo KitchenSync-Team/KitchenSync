@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -23,9 +24,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InventoryIngredientCard } from "@/components/inventory/inventory-ingredient-card";
 import { formatInventoryExpiry, formatInventoryItemName, formatQuantityWithUnit, formatUnitLabel } from "@/lib/formatting/inventory";
+import { buildIngredientBadgePayload, formatDietBadgeLabel, hasStrictDietMatch, normalizeDietFilterKeys } from "@/lib/ingredients/badges";
 import { getIngredientFallbackIcon } from "@/lib/ingredients/icon";
 import { cn } from "@/lib/supabase/utils";
 import { filterImperialUnits, filterUnitsByPossible } from "@/lib/units/filters";
+import { DIETARY_OPTIONS } from "@/app/protected/onboarding/constants";
 
 type UnitOption = { id: string; name: string; abbreviation?: string | null; type: string };
 
@@ -40,6 +43,7 @@ type InventoryEntry = {
   unitId?: string | null;
   expiresAt: string | null;
   possibleUnits?: string[] | null;
+  dietBadges?: string[] | null;
 };
 
 type LocationBucket = {
@@ -49,22 +53,32 @@ type LocationBucket = {
   inventory: InventoryEntry[];
 };
 
-type IngredientResult = { id: number; name: string; image: string | null; aisle: string | null };
+type IngredientResult = {
+  id: number;
+  name: string;
+  image: string | null;
+  aisle: string | null;
+  dietBadges?: string[];
+  dietMatch?: "match" | "unknown";
+};
 
 type Stack = {
   itemId: string;
   itemName: string;
   imageUrl: string | null;
   aisle: string | null;
+  dietBadges?: string[] | null;
   entries: InventoryEntry[];
 };
 
 export function InventoryClient({
   kitchenId,
+  defaultDietFilters,
   units,
   locations,
 }: {
   kitchenId: string;
+  defaultDietFilters?: string[];
   units: UnitOption[];
   locations: LocationBucket[];
 }) {
@@ -77,6 +91,7 @@ export function InventoryClient({
   const [addStep, setAddStep] = useState<"search" | "details">("search");
   const [addQuery, setAddQuery] = useState("");
   const [addResults, setAddResults] = useState<IngredientResult[]>([]);
+  const [addHasSearched, setAddHasSearched] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [addLoadingMore, setAddLoadingMore] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -93,6 +108,9 @@ export function InventoryClient({
   const [addLocationId, setAddLocationId] = useState<string | null>(locations[0]?.id ?? null);
   const [addSaving, setAddSaving] = useState(false);
   const [addSuggestedUnits, setAddSuggestedUnits] = useState<string[]>([]);
+  const [addDietFilters, setAddDietFilters] = useState<string[]>(
+    normalizeDietFilterKeys(defaultDietFilters ?? []),
+  );
 
   const [manageOpen, setManageOpen] = useState(false);
   const [manageStack, setManageStack] = useState<Stack | null>(null);
@@ -235,6 +253,7 @@ export function InventoryClient({
             itemName: entry.itemName,
             imageUrl: entry.imageUrl,
             aisle: entry.aisle,
+            dietBadges: entry.dietBadges ?? null,
             entries: [entry],
           });
         }
@@ -270,13 +289,20 @@ export function InventoryClient({
       setAddError("Enter an ingredient to search.");
       return;
     }
+    setAddHasSearched(true);
     setAddLoading(true);
     setAddError(null);
     try {
       const res = await fetch("/api/ingredients/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: addQuery.trim(), number: 12, offset: 0 }),
+        body: JSON.stringify({
+          query: addQuery.trim(),
+          number: 12,
+          offset: 0,
+          dietFilters: addDietFilters,
+          strictDiet: addDietFilters.length > 0,
+        }),
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
@@ -313,6 +339,8 @@ export function InventoryClient({
           query: addQuery.trim(),
           number: 12,
           offset: addResults.length,
+          dietFilters: addDietFilters,
+          strictDiet: addDietFilters.length > 0,
         }),
       });
       const data = (await res.json()) as Record<string, unknown>;
@@ -339,7 +367,22 @@ export function InventoryClient({
       const units = Array.isArray(data.possibleUnits)
         ? (data.possibleUnits as unknown[]).filter((value): value is string => typeof value === "string")
         : [];
+      const dietBadges = Array.isArray(data.dietBadges)
+        ? (data.dietBadges as unknown[]).filter((value): value is string => typeof value === "string")
+        : [];
       setAddSuggestedUnits(units);
+      setAddSelection((current) =>
+        current && current.id === ingredient.id
+          ? {
+              ...current,
+              dietBadges,
+              dietMatch:
+                addDietFilters.length === 0 || hasStrictDietMatch(dietBadges, addDietFilters)
+                  ? "match"
+                  : "unknown",
+            }
+          : current,
+      );
       if (units.length > 0) {
         const suggested = resolveSuggestedUnitId(units);
         setAddUnitId(suggested ?? null);
@@ -375,6 +418,7 @@ export function InventoryClient({
     setAddCalendarDirection("next");
     setAddCalendarAnimKey(0);
     setAddError(null);
+    setAddHasSearched(false);
     setAddSuggestedUnits([]);
   }
 
@@ -388,6 +432,13 @@ export function InventoryClient({
     if (!addLocationId) {
       setAddError("Select a location.");
       return;
+    }
+    if (addDietFilters.length > 0) {
+      const selectionDietBadges = addSelection.dietBadges ?? [];
+      if (!hasStrictDietMatch(selectionDietBadges, addDietFilters)) {
+        setAddError("This ingredient does not explicitly match your selected diet filters.");
+        return;
+      }
     }
 
     setAddSaving(true);
@@ -407,6 +458,7 @@ export function InventoryClient({
           imageUrl: addSelection.image ?? undefined,
           aisle: addSelection.aisle ?? undefined,
           possibleUnits: addSuggestedUnits.length > 0 ? addSuggestedUnits : undefined,
+          badges: buildIngredientBadgePayload(addSelection.dietBadges ?? []),
         }),
       });
       const data = (await res.json()) as Record<string, unknown>;
@@ -443,6 +495,7 @@ export function InventoryClient({
                       null,
                     expiresAt: addExpiresAt || null,
                     possibleUnits: addSuggestedUnits.length > 0 ? addSuggestedUnits : null,
+                    dietBadges: addSelection.dietBadges ?? null,
                   },
                   ...loc.inventory,
                 ],
@@ -749,7 +802,10 @@ export function InventoryClient({
                       id="add-query"
                       placeholder="milk, pasta, basil..."
                       value={addQuery}
-                      onChange={(event) => setAddQuery(event.target.value)}
+                      onChange={(event) => {
+                        setAddQuery(event.target.value);
+                        setAddHasSearched(false);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -767,7 +823,43 @@ export function InventoryClient({
                     Search
                   </Button>
                 </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {DIETARY_OPTIONS.map((option) => {
+                      const active = addDietFilters.includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() =>
+                            setAddDietFilters((current) =>
+                              current.includes(option.value)
+                                ? current.filter((value) => value !== option.value)
+                                : [...current, option.value],
+                            )
+                          }
+                          className={cn(
+                            "rounded-full border px-2 py-1 text-xs transition",
+                            active ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {addDietFilters.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Diet filters are strict. Only explicit matches are shown.
+                    </p>
+                  )}
+                </div>
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
+                {!addError && addHasSearched && !addLoading && addResults.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No ingredients found for &quot;{addQuery.trim()}&quot;. Try a broader term, or adjusting your filters.
+                  </p>
+                )}
 
                 <div
                   className="app-scrollbar max-h-[50vh] overflow-y-auto pr-1 sm:max-h-[55vh]"
@@ -812,6 +904,24 @@ export function InventoryClient({
                           <div className="mt-3 space-y-1">
                             <p className="line-clamp-2 font-medium">{formatInventoryItemName(result.name)}</p>
                             {result.aisle && <p className="text-xs text-muted-foreground">{result.aisle}</p>}
+                            <div className="flex flex-wrap gap-1">
+                              {(result.dietBadges ?? []).slice(0, 2).map((badge) => (
+                                <Badge key={`${result.id}-${badge}`} variant="outline" className="text-[10px]">
+                                  {formatDietBadgeLabel(badge)}
+                                </Badge>
+                              ))}
+                              {addDietFilters.length > 0 && (
+                                <Badge
+                                  variant={result.dietMatch === "match" ? "secondary" : "outline"}
+                                  className={cn(
+                                    "text-[10px]",
+                                    result.dietMatch === "match" ? "border-emerald-300 text-emerald-700" : "",
+                                  )}
+                                >
+                                  {result.dietMatch === "match" ? "Diet match" : "Unverified"}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </button>
                       );
@@ -1442,6 +1552,7 @@ function StackCard({
         name={stack.itemName}
         imageUrl={stack.imageUrl}
         aisle={stack.aisle}
+        dietBadges={stack.dietBadges ?? undefined}
         quantity={top.quantity}
         unit={top.unit}
         expiresAt={top.expiresAt}

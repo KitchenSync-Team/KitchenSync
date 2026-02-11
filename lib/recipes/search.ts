@@ -87,19 +87,9 @@ export async function buildRecipeSearch({
   const excludeCuisinesApplied = hasKeywordQuery ? [] : excludeCuisines;
 
   const selectedIngredients = normalizeSearchIngredients(payload.includeIngredients ?? []);
-  const pantryIngredients = payload.usePantry
-    ? normalizeSearchIngredients(userContext.pantryIngredients)
-    : [];
 
-  // Use explicit ingredient selections whenever present.
-  // Only fall back to full-kitchen ingredient filtering when running
-  // ingredient-only searches (no keyword query), otherwise query searches
-  // become unintentionally over-constrained.
-  const includeIngredients = (
-    selectedIngredients.length > 0
-      ? selectedIngredients
-      : (!payload.query && payload.usePantry ? pantryIngredients : [])
-  ).slice(0, MAX_INCLUDE_INGREDIENTS);
+  // Only explicitly selected ingredients are hard constraints.
+  const includeIngredients = selectedIngredients.slice(0, MAX_INCLUDE_INGREDIENTS);
 
   if (!payload.query && includeIngredients.length === 0) {
     throw new Error("Please provide a keyword or at least one ingredient to search.");
@@ -109,11 +99,8 @@ export async function buildRecipeSearch({
   const limit = clamp(payload.number ?? 12, 1, 24);
   params.set("number", String(limit));
   params.set("addRecipeInformation", "true");
-  if (!hasKeywordQuery) {
-    // Ingredient-only discovery benefits from full ingredient payloads.
-    params.set("instructionsRequired", "true");
-    params.set("fillIngredients", "true");
-  }
+  // Needed for used/missed ingredient signals that drive pantry match badges.
+  params.set("fillIngredients", "true");
 
   if (payload.maxReadyTime) {
     params.set("maxReadyTime", String(Math.max(1, payload.maxReadyTime)));
@@ -128,19 +115,21 @@ export async function buildRecipeSearch({
     params.set("includeIngredients", includeIngredients.join(","));
   }
 
-  if (!hasKeywordQuery && diet.length > 0) {
+  if (diet.length > 0) {
     params.set("diet", diet.join(","));
   }
 
-  if (!hasKeywordQuery && allergens.length > 0) {
+  if (allergens.length > 0) {
     params.set("intolerances", allergens.join(","));
   }
 
-  if (!hasKeywordQuery && includeCuisinesApplied.length > 0) {
+  const hasExplicitIngredientConstraints = includeIngredients.length > 0;
+
+  if (!hasKeywordQuery && !hasExplicitIngredientConstraints && includeCuisinesApplied.length > 0) {
     params.set("cuisine", includeCuisinesApplied.join(","));
   }
 
-  if (!hasKeywordQuery && excludeCuisinesApplied.length > 0) {
+  if (!hasKeywordQuery && !hasExplicitIngredientConstraints && excludeCuisinesApplied.length > 0) {
     params.set("excludeCuisine", excludeCuisinesApplied.join(","));
   }
 
@@ -165,16 +154,14 @@ export async function buildRecipeSearch({
     url,
     cacheKey,
     headers: client.headers,
-    pantryItems: userContext.pantryItems,
+    pantryItems: payload.usePantry === false ? [] : userContext.pantryItems,
     applied: {
       diet,
       allergens,
       includeCuisines: hasKeywordQuery ? includeCuisines : includeCuisinesApplied,
       excludeCuisines: hasKeywordQuery ? excludeCuisines : excludeCuisinesApplied,
       personalizationSkipped,
-      usedPantryItems: selectedIngredients.length === 0 && !hasKeywordQuery && payload.usePantry
-        ? userContext.pantryIngredients
-        : [],
+      usedPantryItems: [],
     },
   };
 }
@@ -297,7 +284,7 @@ function normalizeSearchIngredients(values: string[]): string[] {
     if (!normalized) continue;
     deduped.add(normalized);
   }
-  return Array.from(deduped);
+  return preferSpecificIngredientPhrases(Array.from(deduped));
 }
 
 function normalizeIngredientForSearch(value: string): string {
@@ -344,4 +331,29 @@ function normalizeIngredientForSearch(value: string): string {
   }
 
   return normalized;
+}
+
+function preferSpecificIngredientPhrases(values: string[]): string[] {
+  if (values.length <= 1) return values;
+
+  const bySpecificity = [...values].sort((a, b) => b.length - a.length);
+  const kept: string[] = [];
+
+  for (const candidate of bySpecificity) {
+    const shouldSkip = kept.some((existing) => {
+      if (existing === candidate) return false;
+      return hasPhrase(existing, candidate);
+    });
+    if (!shouldSkip) {
+      kept.push(candidate);
+    }
+  }
+
+  return kept.sort((a, b) => a.localeCompare(b));
+}
+
+function hasPhrase(haystack: string, phrase: string): boolean {
+  const normalizedHaystack = ` ${haystack.trim()} `;
+  const normalizedPhrase = ` ${phrase.trim()} `;
+  return normalizedHaystack.includes(normalizedPhrase);
 }

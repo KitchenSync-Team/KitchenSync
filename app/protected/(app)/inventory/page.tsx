@@ -25,7 +25,7 @@ export default async function InventoryPage() {
             quantity,
             expires_at,
             unit_id,
-            items ( id, name, brand, image_url, aisle, ingredient_catalog_id, spoonacular_ingredient_id, ingredients_catalog ( possible_units ) ),
+            items ( id, name, brand, image_url, aisle, ingredient_catalog_id, spoonacular_ingredient_id, ingredients_catalog ( possible_units, badges ) ),
             units ( name, abbreviation )
           )
         `,
@@ -40,6 +40,7 @@ export default async function InventoryPage() {
     <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6">
       <InventoryClient
         kitchenId={kitchen.id}
+        defaultDietFilters={kitchenSnapshot.preferences.dietaryPreferences}
         units={(unitsResult.data ?? []).map((unit) => ({
           id: unit.id,
           name: unit.name,
@@ -59,6 +60,7 @@ export default async function InventoryPage() {
               unitId: row.unit_id ?? null,
               itemName: formatInventoryItemName(extractName(row.items)),
               possibleUnits: extractPossibleUnits(row.items),
+              dietBadges: extractDietBadges(row.items),
               imageUrl: extractImage(row.items),
               aisle: extractAisle(row.items),
               unit: extractUnit(row.units),
@@ -127,8 +129,16 @@ function extractAisle(
 
 function extractPossibleUnits(
   item:
-    | { ingredients_catalog?: { possible_units?: string[] | null } | { possible_units?: string[] | null }[] }[]
-    | { ingredients_catalog?: { possible_units?: string[] | null } | { possible_units?: string[] | null }[] }
+    | {
+      ingredients_catalog?:
+        | { possible_units?: string[] | null; badges?: unknown }
+        | { possible_units?: string[] | null; badges?: unknown }[];
+    }[]
+    | {
+      ingredients_catalog?:
+        | { possible_units?: string[] | null; badges?: unknown }
+        | { possible_units?: string[] | null; badges?: unknown }[];
+    }
     | null
     | undefined,
 ): string[] | null {
@@ -138,4 +148,30 @@ function extractPossibleUnits(
   const catalog = Array.isArray(entry.ingredients_catalog) ? entry.ingredients_catalog[0] : entry.ingredients_catalog;
   if (!catalog || !Array.isArray(catalog.possible_units)) return null;
   return catalog.possible_units;
+}
+
+function extractDietBadges(
+  item:
+    | {
+      ingredients_catalog?:
+        | { possible_units?: string[] | null; badges?: unknown }
+        | { possible_units?: string[] | null; badges?: unknown }[];
+    }[]
+    | {
+      ingredients_catalog?:
+        | { possible_units?: string[] | null; badges?: unknown }
+        | { possible_units?: string[] | null; badges?: unknown }[];
+    }
+    | null
+    | undefined,
+): string[] | null {
+  if (!item) return null;
+  const entry = Array.isArray(item) ? item[0] : item;
+  if (!entry || !entry.ingredients_catalog) return null;
+  const catalog = Array.isArray(entry.ingredients_catalog) ? entry.ingredients_catalog[0] : entry.ingredients_catalog;
+  if (!catalog || typeof catalog.badges !== "object" || catalog.badges === null) return null;
+  const diet = (catalog.badges as { diet?: unknown }).diet;
+  if (!Array.isArray(diet)) return null;
+  const normalized = diet.filter((value): value is string => typeof value === "string");
+  return normalized.length > 0 ? normalized : null;
 }

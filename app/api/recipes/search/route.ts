@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const rawBody = (await req.json()) as Record<string, unknown>;
+    const debugEnabled = rawBody.debug === true;
     const payload: Partial<RecipeSearchPayload> = {
       query: typeof rawBody.query === "string" ? rawBody.query : undefined,
       includeIngredients: toStringArray(rawBody.includeIngredients),
@@ -76,10 +77,24 @@ export async function POST(req: NextRequest) {
     }
 
     let { endpoint, url, cacheKey, applied, headers, pantryItems } = searchConfig;
+    const debugStages: Array<{ stage: string; endpoint: string; params: Record<string, string>; count?: number }> = [];
+    const captureParams = (value: string) => {
+      const parsed = new URL(value);
+      return Object.fromEntries(parsed.searchParams.entries());
+    };
+    const pushDebugStage = (stage: string, count?: number) => {
+      debugStages.push({
+        stage,
+        endpoint,
+        params: captureParams(url),
+        ...(typeof count === "number" ? { count } : {}),
+      });
+    };
     const hasKeywordQuery = typeof payload.query === "string" && payload.query.trim().length > 0;
     const hasExplicitIngredientConstraints = (payload.includeIngredients?.length ?? 0) > 0;
+    const hasHardConstraintFilters = (payload.allergens?.length ?? 0) > 0 || (payload.diet?.length ?? 0) > 0;
     const shouldTryIngredientFallback = hasKeywordQuery && hasExplicitIngredientConstraints;
-    const shouldTryKeywordFallback = hasKeywordQuery;
+    const shouldTryKeywordFallback = hasKeywordQuery && !hasHardConstraintFilters && !hasExplicitIngredientConstraints;
 
     const { data: cacheHit, error: cacheError } = await readRecipeCache(cacheKey);
 
@@ -93,18 +108,41 @@ export async function POST(req: NextRequest) {
       Array.isArray((cacheHit?.results as Partial<RecipeSearchResponse> | undefined)?.results) &&
       (((cacheHit?.results as Partial<RecipeSearchResponse>).results?.length ?? 0) === 0);
     const allowCacheRead = !hasKeywordQuery;
+    const shouldBypassZeroCache =
+      cacheHasZeroResults &&
+      (
+        hasKeywordQuery ||
+        hasExplicitIngredientConstraints ||
+        (payload.diet?.length ?? 0) > 0 ||
+        (payload.allergens?.length ?? 0) > 0
+      );
 
-    if (allowCacheRead && cacheFresh && !(shouldTryKeywordFallback && cacheHasZeroResults)) {
+    if (allowCacheRead && cacheFresh && !shouldBypassZeroCache) {
       const cachedPayload = normalizeCachedPayload(cacheHit?.results, applied, endpoint, cacheKey);
-      const matched = attachIngredientMatch(cachedPayload.results, pantryItems);
+      const constrainedCached = applyHardAllergenFilter(cachedPayload.results, applied.allergens);
+      const matched = attachIngredientMatch(constrainedCached, pantryItems);
       const ranked = hasKeywordQuery
         ? sortKeywordResultsByPreferences(matched, applied)
         : sortRecipesByPantryMatch(matched);
-      return NextResponse.json({
+      const payloadBody = {
         ...cachedPayload,
         results: ranked,
         cached: true,
-      });
+      };
+      if (debugEnabled) {
+        return NextResponse.json({
+          ...payloadBody,
+          debug: {
+            fromCache: true,
+            input: payload,
+            hasKeywordQuery,
+            hasExplicitIngredientConstraints,
+            shouldBypassZeroCache,
+            stages: debugStages,
+          },
+        });
+      }
+      return NextResponse.json(payloadBody);
     }
 
     const apiRes = await spoonacularFetch(url, { headers });
@@ -118,6 +156,12 @@ export async function POST(req: NextRequest) {
     }
 
     let normalized = normalizeRecipeResults(endpoint, rawData);
+    normalized = {
+      ...normalized,
+      results: applyHardAllergenFilter(normalized.results, applied.allergens),
+      totalResults: applyHardAllergenFilter(normalized.results, applied.allergens).length,
+    };
+    pushDebugStage("initial", normalized.results.length);
     if (shouldTryIngredientFallback && normalized.results.length === 0) {
       try {
         const fallbackConfig = await buildRecipeSearch({
@@ -149,6 +193,12 @@ export async function POST(req: NextRequest) {
         const fallbackRaw = await fallbackRes.json();
         if (fallbackRes.ok) {
           normalized = normalizeRecipeResults(endpoint, fallbackRaw);
+          normalized = {
+            ...normalized,
+            results: applyHardAllergenFilter(normalized.results, applied.allergens),
+            totalResults: applyHardAllergenFilter(normalized.results, applied.allergens).length,
+          };
+          pushDebugStage("ingredient-fallback", normalized.results.length);
         }
       } catch (fallbackErr) {
         console.error("Recipe search fallback error:", fallbackErr);
@@ -190,6 +240,12 @@ export async function POST(req: NextRequest) {
         const queryOnlyRaw = await queryOnlyRes.json();
         if (queryOnlyRes.ok) {
           normalized = normalizeRecipeResults(endpoint, queryOnlyRaw);
+          normalized = {
+            ...normalized,
+            results: applyHardAllergenFilter(normalized.results, applied.allergens),
+            totalResults: applyHardAllergenFilter(normalized.results, applied.allergens).length,
+          };
+          pushDebugStage("query-only-fallback", normalized.results.length);
         }
       } catch (fallbackErr) {
         console.error("Recipe search query-only fallback error:", fallbackErr);
@@ -206,6 +262,11 @@ export async function POST(req: NextRequest) {
         const minimalRaw = await minimalRes.json();
         if (minimalRes.ok) {
           normalized = normalizeRecipeResults("complexSearch", minimalRaw);
+          normalized = {
+            ...normalized,
+            results: applyHardAllergenFilter(normalized.results, applied.allergens),
+            totalResults: applyHardAllergenFilter(normalized.results, applied.allergens).length,
+          };
           endpoint = "complexSearch";
           cacheKey = `recipes:minimal:${encodeURIComponent(payload.query?.trim() ?? "")}`;
           applied = {
@@ -216,6 +277,7 @@ export async function POST(req: NextRequest) {
             personalizationSkipped: true,
             usedPantryItems: [],
           };
+          pushDebugStage("minimal-fallback", normalized.results.length);
         }
       } catch (fallbackErr) {
         console.error("Recipe search minimal fallback error:", fallbackErr);
@@ -241,10 +303,29 @@ export async function POST(req: NextRequest) {
     const ranked = hasKeywordQuery
       ? sortKeywordResultsByPreferences(matched, applied)
       : sortRecipesByPantryMatch(matched);
-    return NextResponse.json({
+    const responsePayload = {
       ...responseBody,
       results: ranked,
-    });
+    };
+    if (debugEnabled) {
+      return NextResponse.json({
+        ...responsePayload,
+        debug: {
+          fromCache: false,
+          input: payload,
+          hasKeywordQuery,
+          hasExplicitIngredientConstraints,
+          shouldBypassZeroCache,
+          stages: debugStages,
+          final: {
+            endpoint,
+            params: captureParams(url),
+            resultCount: ranked.length,
+          },
+        },
+      });
+    }
+    return NextResponse.json(responsePayload);
   } catch (err: unknown) {
     console.error("Recipe Search Error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -338,6 +419,51 @@ function sortKeywordResultsByPreferences(
     const aLikes = typeof a.aggregateLikes === "number" ? a.aggregateLikes : 0;
     const bLikes = typeof b.aggregateLikes === "number" ? b.aggregateLikes : 0;
     return bLikes - aLikes;
+  });
+}
+
+function applyHardAllergenFilter(recipes: NormalizedRecipe[], allergens: string[]): NormalizedRecipe[] {
+  if (!Array.isArray(recipes) || recipes.length === 0) return [];
+  const blocked = new Set(allergens.map((value) => value.trim().toLowerCase()).filter(Boolean));
+  if (blocked.size === 0) return recipes;
+
+  return recipes.filter((recipe) => {
+    const blobs: string[] = [];
+    if (typeof recipe.title === "string") blobs.push(recipe.title);
+    if (Array.isArray(recipe.extendedIngredients)) {
+      for (const ing of recipe.extendedIngredients) {
+        if (typeof ing.name === "string") blobs.push(ing.name);
+        if (typeof ing.original === "string") blobs.push(ing.original);
+      }
+    }
+    const text = blobs.join(" ").toLowerCase();
+
+    if (blocked.has("egg")) {
+      if (/\begg(s)?\b/.test(text) || /\bmayonnaise\b/.test(text) || /\bmayo\b/.test(text)) return false;
+    }
+    if (blocked.has("peanut")) {
+      if (/\bpeanut(s)?\b/.test(text) || /\bpeanut butter\b/.test(text)) return false;
+    }
+    if (blocked.has("tree nut")) {
+      if (/\balmond(s)?\b|\bcashew(s)?\b|\bwalnut(s)?\b|\bpecan(s)?\b|\bpistachio(s)?\b|\bhazelnut(s)?\b/.test(text)) return false;
+    }
+    if (blocked.has("dairy")) {
+      if (/\bmilk\b|\bbutter\b|\bcheese\b|\bcream\b|\byogurt\b|\bwhey\b|\bcasein\b/.test(text)) return false;
+    }
+    if (blocked.has("soy")) {
+      if (/\bsoy\b|\btofu\b|\bedamame\b|\btempeh\b|\bmiso\b|\bsoy sauce\b/.test(text)) return false;
+    }
+    if (blocked.has("wheat")) {
+      if (/\bwheat\b|\bflour\b|\bbread\b|\bsemolina\b/.test(text)) return false;
+    }
+    if (blocked.has("sesame")) {
+      if (/\bsesame\b|\btahini\b/.test(text)) return false;
+    }
+    if (blocked.has("shellfish")) {
+      if (/\bshrimp\b|\bprawn(s)?\b|\bcrab\b|\blobster\b|\bclam(s)?\b|\bmussel(s)?\b|\boyster(s)?\b|\bscallop(s)?\b/.test(text)) return false;
+    }
+
+    return true;
   });
 }
 
