@@ -32,6 +32,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
     const { id } = await context.params;
     const recipeId = Number(id);
+    const standardize = _req.nextUrl.searchParams.get("standardize") !== "0";
     if (!Number.isFinite(recipeId)) {
       return NextResponse.json({ error: "Invalid recipe id" }, { status: 400 });
     }
@@ -54,7 +55,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
     const recipe = results[0] ?? null;
 
-    if (recipe) {
+    if (recipe && standardize) {
       try {
         const standardized = await standardizeRecipeDetails({
           recipeId,
@@ -62,6 +63,12 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
           sourcePayload: raw,
         });
         if (standardized) {
+          console.info("[recipes:id] standardized with OpenAI", {
+            recipeId,
+            model: standardized.model?.name ?? "unknown",
+            ingredientCount: standardized.ingredients?.length ?? 0,
+            stepCount: standardized.steps?.length ?? 0,
+          });
           recipe.standardized = standardized;
         } else {
           const fallback = buildFallbackStandardized({
@@ -70,12 +77,20 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
             sourcePayload: raw,
           });
           if (fallback) {
+            console.warn("[recipes:id] standardized fallback used", {
+              recipeId,
+            });
             recipe.standardized = fallback;
           }
         }
       } catch (err) {
         console.error("Recipe standardization error:", err);
       }
+    }
+    if (recipe && !standardize) {
+      console.info("[recipes:id] preview mode - OpenAI standardization skipped", {
+        recipeId,
+      });
     }
 
     if (!recipe) {

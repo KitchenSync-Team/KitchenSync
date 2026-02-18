@@ -12,7 +12,7 @@ type StandardizeInput = {
   sourcePayload: unknown;
 };
 
-const PREFERRED_MODEL = process.env.OPENAI_RECIPE_MODEL ?? "gpt-5.1";
+const PREFERRED_MODEL = process.env.OPENAI_RECIPE_MODEL ?? "gpt-4.1";
 const FALLBACK_MODEL = process.env.OPENAI_RECIPE_FALLBACK_MODEL ?? "gpt-4.1-mini";
 const PROMPT_VERSION = "2025-02-15";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
@@ -75,6 +75,9 @@ export async function standardizeRecipeDetails(
   input: StandardizeInput,
 ): Promise<StandardizedRecipeDetails | null> {
   if (!openaiClient || !openAiApiKey) {
+    console.warn("[openai:recipes] skipped - client or API key not configured", {
+      recipeId: input.recipeId,
+    });
     return null;
   }
 
@@ -84,9 +87,18 @@ export async function standardizeRecipeDetails(
   }
 
   for (const model of modelsToTry) {
+    console.info("[openai:recipes] attempt", {
+      recipeId: input.recipeId,
+      model,
+      promptVersion: PROMPT_VERSION,
+    });
     const cacheKey = `${input.recipeId}:${model}`;
     const cached = cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
+      console.info("[openai:recipes] cache hit", {
+        recipeId: input.recipeId,
+        model,
+      });
       return cached.data;
     }
     const inflightKey = `${cacheKey}:inflight`;
@@ -113,15 +125,29 @@ export async function standardizeRecipeDetails(
       });
 
       inflightRequests.delete(inflightKey);
+      console.info("[openai:recipes] success", {
+        recipeId: input.recipeId,
+        model,
+        ingredientCount: standardized.ingredients?.length ?? 0,
+        stepCount: standardized.steps?.length ?? 0,
+      });
 
       return standardized;
     } catch (err) {
       inflightRequests.delete(`${cacheKey}:inflight`);
       console.error(`OpenAI standardization error (model ${model}):`, err);
-      if (!isModelMissingError(err)) {
+      const isLastModel = model === modelsToTry[modelsToTry.length - 1];
+      if (isLastModel) {
+        console.error("[openai:recipes] failed - no model succeeded", {
+          recipeId: input.recipeId,
+          modelsTried: modelsToTry,
+        });
         return null;
       }
-      // try next model
+      console.warn("[openai:recipes] trying fallback model", {
+        recipeId: input.recipeId,
+        failedModel: model,
+      });
     }
   }
 
@@ -132,7 +158,9 @@ export function buildFallbackStandardized(
   input: StandardizeInput,
 ): StandardizedRecipeDetails | null {
   const instructions =
-    normalizeAnalyzedInstructions(input.sourcePayload) ??
+    normalizeAnalyzedInstructions(
+      (input.sourcePayload as { analyzedInstructions?: unknown } | null | undefined)?.analyzedInstructions,
+    ) ??
     normalizeInstructionText(input.normalized.instructions);
 
   const ingredients = normalizeIngredients(input.normalized);
@@ -200,18 +228,50 @@ async function requestStandardization({
           { role: "user", content: buildUserPrompt(input) },
         ],
         max_output_tokens: 2000,
-        text: { verbosity: "low" },
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
       }),
     );
 
-  const message = normalizeResponseText(completion.output_text);
-  if (!message) {
-    throw new Error("OpenAI did not return content");
-  }
+    const completionStatus = (completion as { status?: string }).status ?? "unknown";
+    if (completionStatus === "incomplete") {
+      const reason = (
+        completion as { incomplete_details?: { reason?: string } | null }
+      ).incomplete_details?.reason;
+      throw new Error(
+        `OpenAI response incomplete${reason ? ` (${reason})` : ""}`,
+      );
+    }
+
+    const message = extractResponseText(completion);
+    console.info("[openai:recipes] response received", {
+      recipeId: input.recipeId,
+      model,
+      outputChars: message.length,
+      status: completionStatus,
+    });
+    if (!message) {
+      throw new Error("OpenAI did not return content");
+    }
 
   const parsed = JSON.parse(message) as unknown;
   const parsedObject = isRecord(parsed) ? parsed : {};
-  const normalizedParsed = ensureSchemaDefaults(parsedObject, input);
+  const fallbackIngredients = normalizeIngredients(input.normalized) ?? [];
+  const fallbackSteps =
+    normalizeAnalyzedInstructions(
+      (input.sourcePayload as { analyzedInstructions?: unknown } | null | undefined)?.analyzedInstructions,
+    ) ??
+    normalizeInstructionText(input.normalized.instructions) ??
+    [];
+  const normalizedParsed = ensureSchemaDefaults(
+    parsedObject,
+    input,
+    fallbackIngredients,
+    fallbackSteps,
+  );
   const parsedSource = isRecord(parsedObject.source) ? parsedObject.source : {};
   const parsedModel = isRecord(parsedObject.model) ? parsedObject.model : {};
 
@@ -285,20 +345,6 @@ function buildUserPrompt({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isModelMissingError(err: unknown) {
-  if (!err || typeof err !== "object") return false;
-  const status = "status" in err ? (err as { status?: number }).status : undefined;
-  const code = "code" in err ? (err as { code?: string }).code : undefined;
-  const message =
-    (err as { message?: string }).message ?? (err instanceof Error ? err.message : "");
-
-  return (
-    code === "model_not_found" ||
-    status === 404 ||
-    /does not exist|have access/i.test(message ?? "")
-  );
 }
 
 function isRateLimitError(err: unknown) {
@@ -393,17 +439,101 @@ function normalizeResponseText(value: string | string[] | null | undefined) {
   return value.trim();
 }
 
+function extractResponseText(completion: unknown): string {
+  const maybe = completion as {
+    output_text?: string | string[] | null;
+    output?: Array<{
+      content?: Array<{ type?: string; text?: string }>;
+    }>;
+  };
+  const direct = normalizeResponseText(maybe.output_text);
+  if (direct) return direct;
+
+  const chunks: string[] = [];
+  if (Array.isArray(maybe.output)) {
+    for (const item of maybe.output) {
+      if (!item || !Array.isArray(item.content)) continue;
+      for (const content of item.content) {
+        if (!content) continue;
+        if (content.type === "output_text" && typeof content.text === "string") {
+          const trimmed = content.text.trim();
+          if (trimmed) chunks.push(trimmed);
+        }
+      }
+    }
+  }
+
+  return chunks.join("\n").trim();
+}
+
 function ensureSchemaDefaults(
   parsed: Record<string, unknown>,
   input: StandardizeInput,
+  fallbackIngredients: StandardizedRecipeDetails["ingredients"],
+  fallbackSteps: StandardizedRecipeDetails["steps"],
 ): Record<string, unknown> {
   const metadata =
     isRecord(parsed.metadata) && typeof parsed.metadata.title === "string"
       ? parsed.metadata
       : { title: input.normalized.title ?? "Recipe" };
+
+  const parsedIngredients = Array.isArray(parsed.ingredients)
+    ? parsed.ingredients
+        .map((entry) => {
+          if (!isRecord(entry)) return null;
+          const name = typeof entry.name === "string" ? entry.name.trim() : "";
+          if (!name) return null;
+          return {
+            ...entry,
+            name,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  const ingredients =
+    parsedIngredients.length > 0 ? parsedIngredients : fallbackIngredients;
+
+  const candidateStepsRaw = Array.isArray(parsed.steps) && parsed.steps.length > 0
+    ? parsed.steps
+    : fallbackSteps;
+
+  const normalizedSteps = candidateStepsRaw
+    .map((entry, idx) => {
+      if (!isRecord(entry)) return null;
+      const instruction =
+        typeof entry.instruction === "string"
+          ? entry.instruction.trim()
+          : typeof entry.step === "string"
+            ? entry.step.trim()
+            : "";
+      if (!instruction) return null;
+      const rawNumber = entry.number;
+      const number =
+        typeof rawNumber === "number" && Number.isFinite(rawNumber) && rawNumber > 0
+          ? Math.trunc(rawNumber)
+          : idx + 1;
+      return {
+        ...entry,
+        number,
+        instruction,
+      };
+    })
+    .filter(Boolean);
+
+  const steps =
+    normalizedSteps.length > 0
+      ? normalizedSteps
+      : fallbackSteps.map((step, idx) => ({
+          ...step,
+          number: idx + 1,
+        }));
+
   return {
     ...parsed,
     metadata,
+    ingredients,
+    steps,
   };
 }
 
@@ -474,9 +604,14 @@ function normalizeSteps(steps: StandardizedRecipeDetails["steps"]) {
 }
 
 function splitSentences(value: string) {
-  const normalized = value.replace(/\s+/g, " ").replace(/:\s+/g, ". ").trim();
+  const normalized = value
+    .replace(/\s+/g, " ")
+    .replace(/:\s+/g, ". ")
+    // Handle model output like "tender.Add" where sentence spacing is missing.
+    .replace(/([.!?])([A-Z])/g, "$1 $2")
+    .trim();
   if (!normalized) return [];
-  const punctuationParts = normalized.split(/(?<=[.!?])\s+(?=[A-Z0-9])/).filter(Boolean);
+  const punctuationParts = normalized.split(/(?<=[.!?])\s*(?=[A-Z])/).filter(Boolean);
   if (punctuationParts.length > 1) {
     return punctuationParts.map(capitalize);
   }

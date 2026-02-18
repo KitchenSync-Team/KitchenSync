@@ -81,7 +81,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const [detailLoading, setDetailLoading] = useState(false);
   const [hungryLoading, setHungryLoading] = useState(false);
   const detailCacheRef = useRef<Map<number, NormalizedRecipe>>(new Map());
-  const inflightDetailsRef = useRef<Map<number, Promise<NormalizedRecipe>>>(new Map());
+  const inflightDetailsRef = useRef<Map<string, Promise<NormalizedRecipe>>>(new Map());
   const prefetchAbortRef = useRef<{ generation: number }>({ generation: 0 });
   const detailStandardized = detailInfo?.standardized ?? null;
   const standardizedIngredients =
@@ -287,16 +287,25 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   }, []);
 
   const fetchRecipeDetails = useCallback(
-    async (recipe: NormalizedRecipe): Promise<NormalizedRecipe> => {
+    async (
+      recipe: NormalizedRecipe,
+      options: { standardize?: boolean } = {},
+    ): Promise<NormalizedRecipe> => {
+      const shouldStandardize = options.standardize !== false;
       const cached = detailCacheRef.current.get(recipe.id);
-      if (cached) return cached;
+      if (cached && (!shouldStandardize || Boolean(cached.standardized))) {
+        return cached;
+      }
 
-      const inflight = inflightDetailsRef.current.get(recipe.id);
+      const inflightKey = `${recipe.id}:${shouldStandardize ? "full" : "preview"}`;
+      const inflight = inflightDetailsRef.current.get(inflightKey);
       if (inflight) return inflight;
 
       const request = (async () => {
         try {
-          const res = await fetch(`/api/recipes/${recipe.id}`);
+          const res = await fetch(
+            `/api/recipes/${recipe.id}?standardize=${shouldStandardize ? "1" : "0"}`,
+          );
           const data = await res.json();
           if (res.ok && data) {
             const merged: NormalizedRecipe = { ...recipe, ...(data as NormalizedRecipe) };
@@ -309,11 +318,11 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
         return recipe;
       })();
 
-      inflightDetailsRef.current.set(recipe.id, request);
+      inflightDetailsRef.current.set(inflightKey, request);
       try {
         return await request;
       } finally {
-        inflightDetailsRef.current.delete(recipe.id);
+        inflightDetailsRef.current.delete(inflightKey);
       }
     },
     [],
@@ -327,23 +336,44 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
     }
 
     const cached = detailCacheRef.current.get(detailRecipe.id);
-    if (cached) {
+    if (cached?.standardized) {
       setDetailInfo(cached);
       setDetailLoading(false);
       return;
     }
 
+    let cancelled = false;
+    if (cached) {
+      // Show preview details instantly, then upgrade with standardized content in background.
+      setDetailInfo(cached);
+      setDetailLoading(false);
+      void fetchRecipeDetails(detailRecipe, { standardize: true }).then((merged) => {
+        if (!cancelled) {
+          setDetailInfo(merged);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setDetailLoading(true);
     setDetailInfo(detailRecipe);
 
-    let cancelled = false;
-    void fetchRecipeDetails(detailRecipe)
+    void fetchRecipeDetails(detailRecipe, { standardize: false })
+      .then((preview) => {
+        if (!cancelled) {
+          setDetailInfo(preview);
+          setDetailLoading(false);
+        }
+        return fetchRecipeDetails(detailRecipe, { standardize: true });
+      })
       .then((merged) => {
         if (!cancelled) {
           setDetailInfo(merged);
         }
       })
-      .finally(() => {
+      .catch(() => {
         if (!cancelled) {
           setDetailLoading(false);
         }
@@ -357,7 +387,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
   const prefetchRecipeDetails = useCallback(
     (recipe: NormalizedRecipe) => {
       if (detailCacheRef.current.has(recipe.id)) return;
-      void fetchRecipeDetails(recipe);
+      void fetchRecipeDetails(recipe, { standardize: false });
     },
     [fetchRecipeDetails],
   );
@@ -369,7 +399,7 @@ export function RecipeClient({ preferences }: { preferences: PreferencesSnapshot
         if (index >= recipes.length) return;
         const recipe = recipes[index];
         if (!detailCacheRef.current.has(recipe.id)) {
-          await fetchRecipeDetails(recipe);
+          await fetchRecipeDetails(recipe, { standardize: false });
         }
         setTimeout(() => runSequential(index + 1), 200);
       };
