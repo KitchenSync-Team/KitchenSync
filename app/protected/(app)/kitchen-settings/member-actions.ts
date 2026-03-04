@@ -63,7 +63,7 @@ async function ensureManagePermissions(
     return { error: error ?? "You’re not a member of this kitchen." };
   }
   if (!canManage(record.role)) {
-    return { error: "You need editor access to manage members." };
+    return { error: "You need owner access to manage members." };
   }
   return { role: record.role };
 }

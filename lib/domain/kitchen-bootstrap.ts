@@ -61,7 +61,18 @@ export async function ensureKitchenContext(
     null;
 
   if (existingKitchenId) {
-    await ensureMembershipAndDefaultKitchen(admin, user.id, existingKitchenId, "viewer");
+    const { data: existingKitchen, error: existingKitchenError } = await admin
+      .from("kitchens")
+      .select("owner_id")
+      .eq("id", existingKitchenId)
+      .maybeSingle();
+
+    if (existingKitchenError) {
+      throw existingKitchenError;
+    }
+
+    const role = existingKitchen?.owner_id === user.id ? "owner" : "member";
+    await ensureMembershipAndDefaultKitchen(admin, user.id, existingKitchenId, role);
     return { kitchenId: existingKitchenId };
   }
 
@@ -108,7 +119,7 @@ async function ensureMembershipAndDefaultKitchen(
   admin: ReturnType<typeof createServiceRoleClient>,
   userId: string,
   kitchenId: string,
-  fallbackRole: "owner" | "editor" | "viewer",
+  fallbackRole: "owner" | "member",
 ) {
   const now = new Date().toISOString();
   const { error: membershipUpsertError } = await admin
@@ -122,7 +133,7 @@ async function ensureMembershipAndDefaultKitchen(
         accepted_at: now,
         created_by: userId,
       },
-      { onConflict: "kitchen_id,user_id" },
+      { onConflict: "kitchen_id,user_id", ignoreDuplicates: true },
     );
 
   if (membershipUpsertError) {

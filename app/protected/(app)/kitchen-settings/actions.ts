@@ -20,7 +20,7 @@ async function fetchMemberRole(
   supabase: SupabaseClientType,
   kitchenId: string,
   userId: string,
-): Promise<{ role?: "owner" | "editor" | "viewer"; error?: string }> {
+): Promise<{ role?: "owner" | "member"; error?: string }> {
   const { data, error } = await supabase
     .from("kitchen_members")
     .select("role")
@@ -32,10 +32,7 @@ async function fetchMemberRole(
     return { error: "You’re not a member of this kitchen." };
   }
 
-  const role =
-    data.role === "owner" || data.role === "editor" || data.role === "viewer"
-      ? data.role
-      : "viewer";
+  const role = data.role === "owner" ? "owner" : "member";
 
   return { role };
 }
@@ -95,10 +92,10 @@ export async function updateKitchenSettings(
       };
     }
 
-    if (role === "viewer") {
+    if (role !== "owner") {
       return {
         status: "error",
-        error: "You need editor access to change kitchen settings.",
+        error: "You need owner access to change kitchen settings.",
       };
     }
 
@@ -175,10 +172,10 @@ export async function renameKitchen(
       };
     }
 
-    if (role === "viewer") {
+    if (role !== "owner") {
       return {
         status: "error",
-        error: "You need editor access to change kitchen settings.",
+        error: "You need owner access to change kitchen settings.",
       };
     }
 
