@@ -45,7 +45,7 @@ export async function ensureKitchenContext(
         .maybeSingle(),
       admin
         .from("kitchen_members")
-        .select("kitchen_id, kitchens(owner_id)")
+        .select("kitchen_id")
         .eq("user_id", user.id)
         .order("joined_at", { ascending: true })
         .limit(1),
@@ -61,10 +61,17 @@ export async function ensureKitchenContext(
     null;
 
   if (existingKitchenId) {
-    const membership = memberships?.[0] as
-      | { kitchen_id: string; kitchens: { owner_id: string }[] }
-      | undefined;
-    const role = membership?.kitchens?.[0]?.owner_id === user.id ? "owner" : "viewer";
+    const { data: existingKitchen, error: existingKitchenError } = await admin
+      .from("kitchens")
+      .select("owner_id")
+      .eq("id", existingKitchenId)
+      .maybeSingle();
+
+    if (existingKitchenError) {
+      throw existingKitchenError;
+    }
+
+    const role = existingKitchen?.owner_id === user.id ? "owner" : "member";
     await ensureMembershipAndDefaultKitchen(admin, user.id, existingKitchenId, role);
     return { kitchenId: existingKitchenId };
   }
@@ -112,7 +119,7 @@ async function ensureMembershipAndDefaultKitchen(
   admin: ReturnType<typeof createServiceRoleClient>,
   userId: string,
   kitchenId: string,
-  fallbackRole: "owner" | "editor" | "viewer",
+  fallbackRole: "owner" | "member",
 ) {
   const now = new Date().toISOString();
   const { error: membershipUpsertError } = await admin

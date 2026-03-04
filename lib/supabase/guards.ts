@@ -3,7 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-export type KitchenRole = "owner" | "editor" | "viewer";
+export type KitchenRole = "owner" | "member";
 
 export type AuthGuardResult =
   | { user: User; supabase: SupabaseClient; error?: undefined }
@@ -58,10 +58,7 @@ export async function requireKitchenMembershipForUser(
     return { user, error: "You are not a member of this kitchen" };
   }
 
-  const role: KitchenRole =
-    membership.role === "owner" || membership.role === "editor" || membership.role === "viewer"
-      ? membership.role
-      : "viewer";
+  const role: KitchenRole = membership.role === "owner" ? "owner" : "member";
 
   return { user, role, admin };
 }

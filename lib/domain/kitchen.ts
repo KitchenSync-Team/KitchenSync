@@ -170,7 +170,7 @@ export type KitchenMember = {
 export type KitchenInviteSummary = {
   id: string;
   email: string;
-  role: "owner" | "editor" | "viewer";
+  role: "owner" | "member";
   expiresAt: Nullable<string>;
   invitedByName: Nullable<string>;
   invitedByEmail: Nullable<string>;
@@ -735,10 +735,7 @@ export async function loadKitchenData(
         return {
           id: row.id,
           email: row.email?.trim() ?? "",
-          role:
-            row.role === "owner" || row.role === "editor" || row.role === "viewer"
-              ? row.role
-              : "viewer",
+          role: row.role === "owner" ? "owner" : "member",
           expiresAt: row.expires_at ?? null,
           invitedByName: inviter?.full_name ?? null,
           invitedByEmail: inviter?.email ?? null,
