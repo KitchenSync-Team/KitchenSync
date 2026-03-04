@@ -45,7 +45,7 @@ export async function ensureKitchenContext(
         .maybeSingle(),
       admin
         .from("kitchen_members")
-        .select("kitchen_id")
+        .select("kitchen_id, kitchens(owner_id)")
         .eq("user_id", user.id)
         .order("joined_at", { ascending: true })
         .limit(1),
@@ -61,7 +61,11 @@ export async function ensureKitchenContext(
     null;
 
   if (existingKitchenId) {
-    await ensureMembershipAndDefaultKitchen(admin, user.id, existingKitchenId, "viewer");
+    const membership = memberships?.[0] as
+      | { kitchen_id: string; kitchens: { owner_id: string }[] }
+      | undefined;
+    const role = membership?.kitchens?.[0]?.owner_id === user.id ? "owner" : "viewer";
+    await ensureMembershipAndDefaultKitchen(admin, user.id, existingKitchenId, role);
     return { kitchenId: existingKitchenId };
   }
 
@@ -122,7 +126,7 @@ async function ensureMembershipAndDefaultKitchen(
         accepted_at: now,
         created_by: userId,
       },
-      { onConflict: "kitchen_id,user_id" },
+      { onConflict: "kitchen_id,user_id", ignoreDuplicates: true },
     );
 
   if (membershipUpsertError) {
