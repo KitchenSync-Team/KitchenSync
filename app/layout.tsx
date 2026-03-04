@@ -15,6 +15,10 @@ export const metadata: Metadata = {
   title: "KitchenSync",
   description:
     "KitchenSync keeps every kitchen in sync—from pantry inventory to expiring ingredients and shared receipts.",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     title: "KitchenSync",
     description:

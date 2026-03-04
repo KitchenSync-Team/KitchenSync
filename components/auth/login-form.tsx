@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -38,7 +39,7 @@ export function LoginForm({
         password,
       });
       if (authError) {
-        setError(authError.message ?? "We couldn’t sign you in. Double-check your credentials.");
+        setError(authError.message ?? "We couldn't sign you in. Double-check your credentials.");
         return;
       }
       router.push("/protected");
@@ -51,18 +52,22 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-emerald-900/10 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">Log into KitchenSync</CardTitle>
-          <CardDescription>
+      <Card className="overflow-hidden border-emerald-900/10 bg-white/95 shadow-lg shadow-emerald-950/5 backdrop-blur dark:bg-card">
+        <CardHeader className="space-y-2 pb-4">
+          <CardTitle className="text-2xl tracking-tight">
+            Log into Kitchen<span className="text-emerald-600 dark:text-emerald-400">Sync</span>
+          </CardTitle>
+          <CardDescription className="leading-relaxed">
             Use the email and password you registered with to continue.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           <form onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-foreground/90">
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -74,7 +79,9 @@ export function LoginForm({
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-foreground/90">
+                    Password
+                  </Label>
                   <Link
                     href="/auth/forgot-password"
                     className="ml-auto inline-block text-sm text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-300"
@@ -92,10 +99,11 @@ export function LoginForm({
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in…" : "Login"}
+                {isLoading ? "Logging in…" : "Continue to your kitchen"}
               </Button>
             </div>
-            <div className="mt-4 text-center text-sm">
+            <Separator className="my-5 bg-emerald-900/10 dark:bg-emerald-200/10" />
+            <div className="text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/sign-up"

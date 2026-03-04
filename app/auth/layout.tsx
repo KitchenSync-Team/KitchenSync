@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
 export default function AuthLayout({
   children,
@@ -6,36 +7,27 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-lime-50 via-white to-emerald-100/40 dark:from-background dark:via-background dark:to-background">
-      <div className="grid min-h-screen place-items-stretch md:grid-cols-[1fr_480px]">
-        <div className="relative hidden flex-col justify-between overflow-hidden p-10 text-emerald-950 dark:text-emerald-50 md:flex">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.25),_transparent)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.25),_transparent)]" />
-          <div className="relative z-10 flex flex-col gap-8">
-            <Link href="/" className="inline-flex w-fit items-center gap-3 rounded-full bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur dark:bg-emerald-900/40 dark:text-emerald-100">
-              <span className="rounded-full bg-emerald-600 px-2 py-1 text-xs uppercase text-white">
-                KS
-              </span>
-              KitchenSync
-            </Link>
-            <div className="space-y-4">
-              <h1 className="text-4xl font-semibold leading-tight">
-                Your kitchen, perfectly in sync.
-              </h1>
-              <p className="max-w-sm text-base text-emerald-900/80 dark:text-emerald-100/80">
-                Manage your pantry, stay ahead of expirations, and coordinate what your household has on hand.
-              </p>
-            </div>
-          </div>
-          <div className="relative z-10 space-y-2 text-sm text-emerald-900/70 dark:text-emerald-100/70">
-            <p>Invite your kitchen crew when you’re ready—KitchenSync scales from roommates to families.</p>
-            <p>Need help? Visit the docs or reach out to the KitchenSync team.</p>
-          </div>
-        </div>
+    <main className="relative min-h-screen overflow-x-clip bg-gradient-to-b from-background via-background to-emerald-100/20 dark:to-emerald-950/20">
+      <div className="pointer-events-none absolute left-[-12rem] top-[-10rem] h-80 w-80 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/20" />
+      <div className="pointer-events-none absolute bottom-[-12rem] right-[-10rem] h-96 w-96 rounded-full bg-lime-200/30 blur-3xl dark:bg-emerald-400/10" />
 
-        <div className="flex min-h-screen items-center justify-center px-6 py-12">
-          <div className="w-full max-w-sm space-y-12">
-            {children}
-          </div>
+      <div className="absolute inset-x-0 top-0 z-20 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center text-3xl font-semibold tracking-tight text-foreground"
+          >
+            <span>
+              Kitchen<span className="text-emerald-600 dark:text-emerald-400">Sync</span>
+            </span>
+          </Link>
+          <ThemeSwitcher />
+        </div>
+      </div>
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-24 sm:px-6">
+        <div className="w-full max-w-md">
+          {children}
         </div>
       </div>
     </main>

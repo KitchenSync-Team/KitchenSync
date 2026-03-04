@@ -33,7 +33,7 @@ export function UpdatePasswordForm({
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
-        setError(updateError.message ?? "We couldn’t update your password.");
+        setError(updateError.message ?? "We couldn't update your password.");
         return;
       }
       router.push("/protected");
@@ -47,9 +47,9 @@ export function UpdatePasswordForm({
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="border-emerald-900/10 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">Secure your account</CardTitle>
-          <CardDescription>Enter a new password you haven&apos;t used before.</CardDescription>
+        <CardHeader className="space-y-2 pb-4">
+          <CardTitle className="text-2xl tracking-tight">Secure your account</CardTitle>
+          <CardDescription className="leading-relaxed">Enter a new password you haven&apos;t used before.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleForgotPassword}>

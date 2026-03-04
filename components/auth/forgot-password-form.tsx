@@ -35,7 +35,7 @@ export function ForgotPasswordForm({
         redirectTo: `${window.location.origin}/auth/update-password`,
       });
       if (resetError) {
-        setError(resetError.message ?? "We couldn’t send the reset email. Try again.");
+        setError(resetError.message ?? "We couldn't send the reset email. Try again.");
         return;
       }
       setSuccess(true);
@@ -50,9 +50,9 @@ export function ForgotPasswordForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       {success ? (
         <Card className="border-emerald-900/10 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Check your inbox</CardTitle>
-            <CardDescription>
+          <CardHeader className="space-y-2 pb-4">
+            <CardTitle className="text-2xl tracking-tight">Check your inbox</CardTitle>
+            <CardDescription className="leading-relaxed">
               Password reset instructions are on the way.
             </CardDescription>
           </CardHeader>
@@ -64,10 +64,10 @@ export function ForgotPasswordForm({
         </Card>
       ) : (
         <Card className="border-emerald-900/10 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Reset your password</CardTitle>
-            <CardDescription>
-              Enter the email you use for KitchenSync and we&apos;ll handle the rest.
+          <CardHeader className="space-y-2 pb-4">
+            <CardTitle className="text-2xl tracking-tight">Reset your password</CardTitle>
+            <CardDescription className="leading-relaxed">
+              We&apos;ll send a secure link to update your KitchenSync password.
             </CardDescription>
           </CardHeader>
           <CardContent>
