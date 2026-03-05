@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { ROLE_OPTIONS, type KitchenRole } from "@/components/kitchen-settings/roles";
 
 export type MemberActionResult = { success: true } | { success: false; error: string };
@@ -68,11 +69,9 @@ async function ensureManagePermissions(
   return { role: record.role };
 }
 
-async function countOwners(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  kitchenId: string,
-): Promise<{ owners: number; error?: string }> {
-  const { data, error } = await supabase
+async function countOwners(kitchenId: string): Promise<{ owners: number; error?: string }> {
+  const admin = createServiceRoleClient();
+  const { data, error } = await admin
     .from("kitchen_members")
     .select("role")
     .eq("kitchen_id", kitchenId);
@@ -281,7 +280,9 @@ export async function updateMemberRole(input: {
       return { success: false, error: "Only owners can update member roles." };
     }
 
-    const { data: targetData, error: targetError } = await supabase
+    const admin = createServiceRoleClient();
+
+    const { data: targetData, error: targetError } = await admin
       .from("kitchen_members")
       .select("role")
       .eq("kitchen_id", kitchenId)
@@ -294,7 +295,7 @@ export async function updateMemberRole(input: {
 
     const currentRole = normalizeRole(targetData.role);
 
-    const { owners, error: ownersError } = await countOwners(supabase, kitchenId);
+    const { owners, error: ownersError } = await countOwners(kitchenId);
     if (ownersError) {
       return { success: false, error: ownersError };
     }
@@ -303,7 +304,7 @@ export async function updateMemberRole(input: {
       return { success: false, error: "You need another owner before demoting this one." };
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await admin
       .from("kitchen_members")
       .update({ role: targetRole })
       .eq("kitchen_id", kitchenId)
@@ -352,7 +353,9 @@ export async function removeMember(input: {
       return { success: false, error: permissionError ?? "Insufficient permissions." };
     }
 
-    const { data: targetData, error: targetError } = await supabase
+    const admin = createServiceRoleClient();
+
+    const { data: targetData, error: targetError } = await admin
       .from("kitchen_members")
       .select("role")
       .eq("kitchen_id", kitchenId)
@@ -369,7 +372,7 @@ export async function removeMember(input: {
       return { success: false, error: "Only owners can remove another owner." };
     }
 
-    const { owners, error: ownersError } = await countOwners(supabase, kitchenId);
+    const { owners, error: ownersError } = await countOwners(kitchenId);
     if (ownersError) {
       return { success: false, error: ownersError };
     }
@@ -382,7 +385,7 @@ export async function removeMember(input: {
       return { success: false, error: "Add another owner before leaving this kitchen." };
     }
 
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await admin
       .from("kitchen_members")
       .delete()
       .eq("kitchen_id", kitchenId)
