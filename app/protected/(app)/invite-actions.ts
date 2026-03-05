@@ -6,9 +6,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-export async function acceptInvitation(formData: FormData): Promise<void> {
+export async function acceptInvitation(formData: FormData): Promise<{ error?: string }> {
   const inviteId = formData.get("inviteId") as string | null;
-  if (!inviteId) return;
+  if (!inviteId) return { error: "Invalid invitation." };
 
   // Auth check uses the regular client (cookie-based session).
   const supabase = await createClient();
@@ -26,13 +26,14 @@ export async function acceptInvitation(formData: FormData): Promise<void> {
 
   const { data: invite, error: inviteError } = await admin
     .from("kitchen_invitations")
-    .select("id, kitchen_id, role, expires_at, accepted_at")
+    .select("id, kitchen_id, role, expires_at, accepted_at, email")
     .eq("id", inviteId)
     .maybeSingle();
 
-  if (inviteError || !invite) return;
-  if (invite.accepted_at) return;
-  if (new Date(invite.expires_at) < new Date()) return;
+  if (inviteError || !invite) return { error: "Invitation not found." };
+  if (invite.email.toLowerCase() !== user.email!.toLowerCase()) return { error: "Invitation not found." };
+  if (invite.accepted_at) return { error: "This invitation has already been accepted." };
+  if (new Date(invite.expires_at) < new Date()) return { error: "This invitation has expired." };
 
   const { data: existingMember } = await admin
     .from("kitchen_members")
@@ -42,14 +43,15 @@ export async function acceptInvitation(formData: FormData): Promise<void> {
     .maybeSingle();
 
   if (!existingMember) {
-    await admin.from("kitchen_members").insert({
+    const { error: insertError } = await admin.from("kitchen_members").insert({
       kitchen_id: invite.kitchen_id,
       user_id: user.id,
       role: invite.role ?? "member",
     });
+    if (insertError) return { error: "Failed to join kitchen. Please try again." };
   }
 
-  await admin
+  const { error: updateError } = await admin
     .from("kitchen_invitations")
     .update({
       accepted_at: new Date().toISOString(),
@@ -57,6 +59,9 @@ export async function acceptInvitation(formData: FormData): Promise<void> {
     })
     .eq("id", inviteId);
 
+  if (updateError) return { error: "Failed to confirm invitation. Please try again." };
+
   revalidatePath("/protected");
   revalidatePath("/protected/kitchen-settings");
+  return {};
 }

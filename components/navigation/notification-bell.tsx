@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Bell } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,17 +26,22 @@ type NotificationBellProps = {
 };
 
 export function NotificationBell({ pendingInvites = [] }: NotificationBellProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const hasUnread = pendingInvites.length > 0;
 
-  const handleAccept = (inviteId: string) => {
+  const handleAccept = async (inviteId: string) => {
+    setPendingIds((prev) => new Set(prev).add(inviteId));
     const formData = new FormData();
     formData.set("inviteId", inviteId);
-    startTransition(async () => {
-      await acceptInvitation(formData);
-      router.refresh();
+    const result = await acceptInvitation(formData);
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(inviteId);
+      return next;
     });
+    if (result.error) {
+      toast.error(result.error);
+    }
   };
 
   return (
@@ -77,10 +82,10 @@ export function NotificationBell({ pendingInvites = [] }: NotificationBellProps)
                 <Button
                   size="sm"
                   className="h-7 text-xs"
-                  disabled={isPending}
+                  disabled={pendingIds.has(invite.id)}
                   onClick={() => handleAccept(invite.id)}
                 >
-                  {isPending ? "Joining…" : "Accept"}
+                  {pendingIds.has(invite.id) ? "Joining…" : "Accept"}
                 </Button>
               </div>
             </DropdownMenuItem>
