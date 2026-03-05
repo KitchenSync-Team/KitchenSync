@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { NotificationBell } from "@/components/navigation/notification-bell";
 import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import type { NavMainItem } from "@/components/navigation/nav-main";
 import type { NavUserData } from "@/components/navigation/nav-user";
@@ -24,6 +25,27 @@ export default async function ProtectedAppLayout({
     kitchen,
     user,
   } = kitchenSnapshot;
+
+  // Load pending kitchen invitations for the current user (service role bypasses RLS on kitchens).
+  type PendingInvite = { id: string; kitchenId: string; kitchenName: string; role: string };
+  let pendingInvites: PendingInvite[] = [];
+  if (user.email) {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("kitchen_invitations")
+      .select("id, kitchen_id, role, kitchens(name)")
+      .eq("email", user.email)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString());
+    if (data) {
+      pendingInvites = data.map((row) => ({
+        id: row.id,
+        kitchenId: row.kitchen_id,
+        kitchenName: (row.kitchens as unknown as { name: string } | null)?.name ?? "Unknown kitchen",
+        role: row.role ?? "member",
+      }));
+    }
+  }
 
   const kitchenMeta =
     typeof kitchen.memberCount === "number"
@@ -94,7 +116,7 @@ export default async function ProtectedAppLayout({
 
           {/* Right Section: The New Notification Bell */}
           <div className="flex items-center gap-2">
-            <NotificationBell />
+            <NotificationBell pendingInvites={pendingInvites} />
           </div>
         </header>
 
