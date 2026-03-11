@@ -54,3 +54,33 @@ export async function PATCH(
     return NextResponse.json({ error: "Server error", detail }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { error: deleteError } = await supabase.from("inventory").delete().eq("id", id);
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("Inventory delete error:", err);
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: "Server error", detail }, { status: 500 });
+  }
+}
