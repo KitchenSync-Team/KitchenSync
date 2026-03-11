@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 type Option = { id: string | number; name: string };
 
 type Props = {
   open: boolean;
   onCloseAction: () => void;
-  kitchenId: string;
+  kitchenId?: string;
   units: Option[];
   locations: Option[];
   onCreatedAction?: () => void;
@@ -22,8 +21,6 @@ export default function AddItemModal({
   locations,
   onCreatedAction,
 }: Props) {
-  const supabase = createClient();
-
   const [form, setForm] = useState({
     name: "",
     quantity: 1,
@@ -42,20 +39,37 @@ export default function AddItemModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
+
     setLoading(true);
     try {
       const payload = {
-        kitchen_id: kitchenId,
         name: form.name.trim(),
-        quantity: Number(form.quantity) || 0,
-        unit_id: form.unit_id || null,
-        location_id: form.location_id || null,
-        expiration_date: form.expiration_date || null,
+        quantity: Number(form.quantity) || 1,
+        unitId: form.unit_id || null,
+        locationId: form.location_id || null,
+        expiresAt: form.expiration_date || null,
         notes: form.notes || null,
       };
-      const { error } = await supabase.from("items").insert(payload);
-      if (error) {
-        setErr(error.message ?? "Failed to add item");
+      if (kitchenId) {
+        // Optional: use provided kitchen ID, but server resolves current kitchen by auth if absent.
+        Object.assign(payload, { kitchenId });
+      }
+
+      const res = await fetch("/api/ingredients/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : typeof data.detail === "string"
+            ? data.detail
+            : "Unable to add item";
+        setErr(message);
         return;
       }
 
@@ -63,7 +77,7 @@ export default function AddItemModal({
       onCloseAction();
       setForm({ name: "", quantity: 1, unit_id: "", location_id: "", expiration_date: "", notes: "" });
     } catch (error: unknown) {
-      const message = error instanceof Error && error.message ? error.message : "Failed to add item";
+      const message = error instanceof Error ? error.message : "Failed to add item";
       setErr(message);
     } finally {
       setLoading(false);

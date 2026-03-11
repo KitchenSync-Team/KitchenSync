@@ -152,7 +152,33 @@ export function InventoryClient({
     [allLocationIds],
   );
 
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+
   const displayUnits = useMemo(() => filterImperialUnits(units), [units]);
+
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!window.confirm('Delete this item from inventory?')) return;
+    setDeletingEntryId(entryId);
+
+    try {
+      const res = await fetch(`/api/inventory/${entryId}`, { method: 'DELETE' });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Unable to delete item');
+      }
+
+      setBuckets((current) =>
+        current.map((bucket) => ({
+          ...bucket,
+          inventory: bucket.inventory.filter((entry) => entry.id !== entryId),
+        })),
+      );
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingEntryId(null);
+    }
+  };
 
   const resolveUnitIdByLabel = useCallback(
     (label: string | null) => {
@@ -758,6 +784,8 @@ export function InventoryClient({
                         stack={stack}
                         onManage={() => openManage(stack)}
                         onConsume={() => openConsume(stack)}
+                        onDelete={() => handleDeleteEntry(stack.entries[0].id)}
+                        deletingEntryId={deletingEntryId}
                       />
                     ))
                   )}
@@ -1530,10 +1558,14 @@ function StackCard({
   stack,
   onManage,
   onConsume,
+  onDelete,
+  deletingEntryId,
 }: {
   stack: Stack;
   onManage: () => void;
   onConsume: () => void;
+  onDelete: () => void;
+  deletingEntryId: string | null;
 }) {
   const top = stack.entries[0];
   const count = stack.entries.length;
@@ -1566,16 +1598,25 @@ function StackCard({
           ) : undefined
         }
         footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={onManage} className="gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={onManage} className="gap-1 px-2 py-1">
               <CalendarIcon className="h-4 w-4" />
               Manage
             </Button>
-            <Button size="sm" onClick={onConsume} className="gap-1">
+            <Button size="sm" onClick={onConsume} className="gap-1 px-2 py-1">
               <Utensils className="h-4 w-4" />
               Consume
             </Button>
-          </>
+            <Button
+              size="sm"
+              onClick={onDelete}
+              variant="ghost"
+              className="gap-1 px-2 py-1 text-destructive hover:bg-red-50"
+              disabled={deletingEntryId === top.id}
+            >
+              {deletingEntryId === top.id ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
         }
       />
     </div>
