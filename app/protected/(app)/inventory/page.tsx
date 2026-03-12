@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { resolveKitchen } from "@/app/protected/_lib/resolve-kitchen";
 import { formatInventoryItemName } from "@/lib/formatting/inventory";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -38,6 +40,7 @@ export default async function InventoryPage() {
 
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6">
+      <Suspense>
       <InventoryClient
         kitchenId={kitchen.id}
         defaultDietFilters={kitchenSnapshot.preferences.dietaryPreferences}
@@ -68,6 +71,7 @@ export default async function InventoryPage() {
             : [],
         }))}
       />
+      </Suspense>
     </section>
   );
 }

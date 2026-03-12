@@ -333,12 +333,12 @@ function PreferenceBadges({
         {cuisines.likes.length + cuisines.dislikes.length > 0 ? (
           <>
             {cuisines.likes.map((cuisine) => (
-              <Badge key={`like-${cuisine}`} variant="outline" className="border-blue-300 text-blue-900 dark:border-blue-800 dark:text-blue-200">
+              <Badge key={`like-${cuisine}`} variant="outline" className="border-emerald-300 text-emerald-900 dark:border-emerald-800 dark:text-emerald-200">
                 Like: {cuisineMap[cuisine] ?? toTitle(cuisine)}
               </Badge>
             ))}
             {cuisines.dislikes.map((cuisine) => (
-              <Badge key={`avoid-${cuisine}`} variant="outline" className="border-amber-300 text-amber-900 dark:border-amber-800 dark:text-amber-200">
+              <Badge key={`avoid-${cuisine}`} variant="outline" className="border-red-300 text-red-900 dark:border-red-800 dark:text-red-200">
                 Avoid: {cuisineMap[cuisine] ?? toTitle(cuisine)}
               </Badge>
             ))}

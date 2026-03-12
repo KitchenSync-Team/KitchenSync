@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { addDays, addMonths, format, isValid, parseISO } from "date-fns";
 import {
   Calendar as CalendarIcon,
@@ -88,6 +89,11 @@ export function InventoryClient({
   );
 
   const [addOpen, setAddOpen] = useState(false);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("add") === "true") setAddOpen(true);
+  }, [searchParams]);
+
   const [addStep, setAddStep] = useState<"search" | "details">("search");
   const [addQuery, setAddQuery] = useState("");
   const [addResults, setAddResults] = useState<IngredientResult[]>([]);
