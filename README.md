@@ -1,125 +1,79 @@
 # KitchenSync
 
-KitchenSync helps households and shared kitchens stay on top of pantry inventory, expirations, receipts, and user preferences. Authenticated users land inside a protected workspace anchored by the sidebar shell; unauthenticated visitors stay on the marketing landing page.
+KitchenSync is a shared kitchen management app for households and teams. Track pantry inventory, expiration dates, receipts, and recipes — all synced in real time across everyone in your kitchen.
 
-## Highlights
+Live at [kitchen-sync.org](https://kitchen-sync.org)
 
- - **Supabase-first auth & data** – Edge middleware plus `lib/domain/kitchen.ts` keep every protected route in sync with Supabase sessions and row-level security.
- - **Onboarding guardrails** – New members confirm profile details, dietary styles, allergens, communication prefs, and storage locations before reaching the dashboard.
-- **User & Preferences hub** – The `/protected/profile` route lets users update identity, communication, dietary/cuisine settings, locale/theme preferences, and avatars (cropped + uploaded to S3/Supabase Storage).
- - **Composable UI** – shadcn/ui primitives live under `components/ui`, while feature bundles (`components/profile`, `components/onboarding`, etc.) own their specific UX.
+## Features
 
-## V1 MVP Delivery Tracker
-
-### Completed
-- Auth flows: sign up, login, password reset/update, protected routing.
-- Guided onboarding: profile capture, dietary/allergen/cuisine prefs, kitchen naming, location setup.
-- Inventory management: add/edit/consume inventory entries with location and unit support.
-- Ingredients workflow: search Spoonacular ingredients, map details, and add to inventory.
-- Recipes workflow: search, random discovery, pantry-aware matching, filters, and details dialogs.
-- Kitchen settings: rename kitchen, manage locations, and manage members/invites.
-- Profile & preferences: identity updates, avatar upload, communication toggles, dietary/cuisine preferences, and locale/theme preferences.
-- Deterministic kitchen bootstrap: backend now ensures a kitchen context exists before onboarding/protected app loads.
-
-### Remaining For V1
-- Build the main `/protected` dashboard (current route is a placeholder).
-- Replace notification bell mock data with real alert-driven data.
-- Ship invite acceptance/join flow (mark accepted invites and add memberships).
-- Add canonical schema + RLS migrations for full reproducibility (current migration set is minimal).
-
-## Recipes experience
-
-- `/protected/recipes` uses a two-column layout: filters on the left; search bar + “Search” and “I’m feeling hungry” on top of results.
-- Filters: diet, allergens, cuisine likes/dislikes, pantry toggle, ready-in minutes, sort. “Reset to profile” restores saved prefs, “Clear filters” empties them, and “Skip my profile” ignores saved prefs.
-- “Search” posts to `/api/recipes/search`. “I’m feeling hungry” hits `/api/recipes/random` (12 recipes; respects filters and falls back to unfiltered if empty).
-- Results use `components/recipes/recipe-card` with Details and “Open recipe” (sourceUrl) actions; the details dialog shows ingredients used/missing and tags.
+- **Inventory management** — Add, edit, and consume items with location, unit, and expiration tracking
+- **Expiration alerts** — Automatic flagging of items expiring soon or already expired
+- **Recipe discovery** — Search Spoonacular recipes, filter by diet/allergens/cuisine, and match against what's in your pantry
+- **Receipt parsing** — Upload receipts and map line items to inventory
+- **Multi-user kitchens** — Invite members, manage roles, and share a live pantry with your household
+- **Onboarding flow** — New users set up profile, dietary preferences, allergens, and storage locations before reaching the app
+- **Profile & preferences** — Avatar upload, locale/theme settings, dietary and cuisine preferences
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router, Server Components, Turbopack dev server)
-- **Styling**: Tailwind CSS + shadcn/ui wrappers
-- **Data/Auth**: Supabase (Auth, Postgres, Storage)
-- **Storage**: Supabase S3-compatible bucket for avatars (signed URLs generated server-side)
-- **Tooling**: TypeScript, ESLint, npm
-- **Hosting**: Vercel (preview per PR, production on `main`)
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router, Server Components, Turbopack) |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 + shadcn/ui (Radix UI) |
+| Auth & Database | Supabase (Auth, Postgres, Row Level Security) |
+| Storage | AWS S3 (avatars) |
+| Recipe API | Spoonacular |
+| AI | OpenAI gpt-4.1 (recipe standardization) |
+| Hosting | Vercel (preview per PR, production on `main`) |
 
-## Repository Structure
+## Project Structure
 
-### Components philosophy
-- Shared atoms live in `components/ui`. They wrap Radix/shadcn primitives with Tailwind styling and export PascalCase components.
-- Feature bundles (`components/profile`, `components/onboarding`, etc.) own their larger composite pieces and export only what their route segments need.
-- Root-level helpers were reorganized into themed folders (`auth`, `navigation`, `modals`, `theme`) to keep usage discoverable.
+```
+app/
+├── page.tsx                   # Landing page (redirects authed users to /protected)
+├── layout.tsx                 # Root layout — ThemeProvider, session providers
+├── protected/
+│   ├── (app)/                 # Main authenticated app
+│   │   ├── inventory/         # Pantry inventory management
+│   │   ├── ingredients/       # Ingredient search and mapping
+│   │   ├── recipes/           # Recipe search and discovery
+│   │   ├── kitchen-settings/  # Kitchen name, locations, members, invites
+│   │   └── profile/           # User profile and preferences
+│   └── onboarding/            # First-run onboarding flow
+├── api/                       # API routes (ingredients, inventory, recipes, search, profile)
+└── auth/                      # Auth pages (login, sign-up, password reset/update, confirm)
 
-### lib/ philosophy
-- `lib/domain/` contains data loaders/aggregators (currently `kitchen.ts`).
-- `lib/supabase/` houses client factories, middleware helpers, and shared utilities.
-- `lib/storage/` and `lib/image/` encapsulate S3 + canvas logic so routes/components stay lean.
+components/
+├── ui/                        # Shared shadcn/Radix primitives
+├── inventory/                 # Inventory feature components
+├── recipes/                   # Recipe feature components
+├── navigation/                # Sidebar, header, notification bell
+└── auth/, profile/, onboarding/, theme/
 
-## Development Setup
+lib/
+├── supabase/                  # Client, server, service-role, middleware, guards, types
+├── recipes/                   # Search, matching, preferences, filters, caching
+├── ingredients/               # Search, badges, icon, details
+├── openai/recipes.ts          # AI recipe standardization (rate limiting, caching, fallback)
+├── domain/                    # Kitchen data loaders and bootstrap logic
+├── spoonacular/               # API client and fetch helpers
+└── storage/, image/, units/
 
-1. **Prerequisites**
-   - Node.js 20 (`nvm install 20 && nvm use 20` recommended)
-   - npm (bundled with Node)
-   - Supabase + Vercel access for environment variables
+scripts/db/
+├── auth_stub.sql              # Fake auth schema for local Postgres (run first)
+└── bootstrap.sql              # Complete schema, indexes, functions, triggers, and RLS policies
 
-2. **Clone & install**
-   ```bash
-   git clone https://github.com/KitchenSync-Team/KitchenSync.git
-   cd KitchenSync
-   npm install
-   ```
+supabase/migrations/           # Incremental production migrations (applied via Supabase dashboard)
+```
 
-3. **Environment variables**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Fill in at least:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (match anon key)
-   - `SUPABASE_SERVICE_ROLE_KEY` (server-only usage)
-   - `S3_AVATARS_*` variables if you plan to test avatar uploads locally
-   - `SPOONACULAR_RAPIDAPI_KEY` (preferred) or `SPOONACULAR_API_KEY` (legacy direct key)
-   - Optional: `SPOONACULAR_RAPIDAPI_HOST` (defaults to `spoonacular-recipe-food-nutrition-v1.p.rapidapi.com`)
-   The middleware also accepts `SUPABASE_URL` / `SUPABASE_ANON_KEY` as fallbacks.
+## Key Patterns
 
-4. **Run & lint**
-   ```bash
-   npm run dev    # http://localhost:3000
-   npm run lint   # static analysis
-   npm run build  # optional production check
-   ```
+- **Auth guards** — `requireAuthenticatedUser()` and `requireKitchenMembershipForUser()` in `lib/supabase/guards.ts` protect every server action and route
+- **Service role client** — `lib/supabase/service-role.ts` bypasses RLS for admin operations (kitchen bootstrap, invite acceptance)
+- **Kitchen roles** — `owner` and `member` stored in `kitchen_members`; owners can invite, rename, and delete the kitchen
+- **Server Actions** — mutations use Next.js `"use server"` actions; no separate mutation API routes
 
-5. **Supabase database**
-   - Link the repo to your Supabase project (or request access to the shared instance).
-   - Apply migrations from `supabase/migrations/` if/when they exist (`supabase db push` or run the SQL via the dashboard).
+## Contributing
 
-## Scripts
-
-| Command         | Purpose                              |
-|-----------------|--------------------------------------|
-| `npm run dev`   | Start Next.js dev server (Turbopack) |
-| `npm run build` | Production build / type check        |
-| `npm run lint`  | ESLint (Next.js config)              |
-| `node scripts/fetch-recipe-info.cjs <id-or-url>` | Fetch a single Spoonacular recipe (prefers `SPOONACULAR_RAPIDAPI_KEY`, falls back to `SPOONACULAR_API_KEY` from env or .env.local) |
-
-## Testing Avatars Locally
-
-1. Set the `S3_AVATARS_*` env vars (`*_REGION`, `*_ENDPOINT`, `*_ACCESS_KEY`, `*_SECRET_KEY`, `*_BUCKET`).
-2. Ensure the bucket allows the project credentials to `PutObject`/`DeleteObject`.
-3. Run `npm run dev` and navigate to `/protected/profile` → Change avatar.
-4. On upload, the API stores only the object key; `lib/domain/kitchen` signs a URL for display.
-
-## Contributing & Deployment
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for:
-- Branch naming conventions and PR expectations
-- Vercel preview & production deployment flow
-- Hotfix protocol
-- Supabase migration workflow
-
-Every PR automatically receives a Vercel preview URL; merging to `main` deploys production. Keep `main` deployable at all times.
-
-## Questions?
-
-Open an issue, start a GitHub discussion, or drop a note in team chat. Contributions are welcome—just follow the branching & PR process documented in `CONTRIBUTING.md`.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, environment variables, database setup, branching conventions, PR process, and deployment workflow.
