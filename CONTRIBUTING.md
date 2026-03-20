@@ -61,7 +61,7 @@ psql -h localhost -p 5433 -U postgres -d postgres -f scripts/db/bootstrap.sql
 ```
 
 To simulate a logged-in user when testing RLS locally:
-```sql
+```
 SET app.current_user_id = '<your-uuid>';
 ```
 
