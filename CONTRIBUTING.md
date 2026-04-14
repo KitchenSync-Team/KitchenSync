@@ -1,63 +1,127 @@
 # Contributing to KitchenSync
 
-This file covers **how we work in Git**, **how PRs ship through Vercel**, and **how Supabase migrations roll out**. Treat it as the canonical workflow reference.
+Everything you need to clone, run, and ship changes to KitchenSync.
 
 ## Prerequisites
 
-- Node.js 20 (`nvm install 20 && nvm use 20` recommended)
-- `npm install` completed
-- `.env.local` populated with Supabase + S3 credentials (see `README.md`)
-- Access to the shared Supabase + Vercel projects (ask in team chat if you’re missing keys)
+- Node.js 20+ (`nvm install 20 && nvm use 20`)
+- npm (bundled with Node)
+- Access to the shared Supabase and Vercel projects — ask in team chat if you're missing credentials
+
+## Local Setup
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/KitchenSync-Team/KitchenSync.git
+cd KitchenSync
+npm install
+```
+
+### 2. Environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in `.env.local` with your values. Contact the team for shared Supabase and S3 credentials. Key variables:
+
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Same value as anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key — server-only, never expose to the browser |
+| `SPOONACULAR_RAPIDAPI_KEY` | RapidAPI key for Spoonacular (preferred) |
+| `SPOONACULAR_API_KEY` | Direct Spoonacular key (fallback) |
+| `OPENAI_API_KEY` | OpenAI key for recipe standardization |
+| `S3_AVATARS_*` | S3 credentials — only needed for testing avatar uploads locally |
+
+See `.env.example` for the full list.
+
+### 3. Database
+
+**Option A — Shared Supabase instance (recommended)**
+
+Use the credentials from the team. No database setup needed — just fill in `.env.local` and run the app.
+
+**Option B — Local Postgres**
+
+Use the bootstrap scripts to initialise a fresh database:
+
+```bash
+# Start a local Postgres instance via Docker
+docker compose up -d
+
+# Create the fake auth schema (must run first)
+psql -h localhost -p 5433 -U postgres -d postgres -f scripts/db/auth_stub.sql
+
+# Bootstrap the full schema (tables, indexes, functions, triggers, RLS)
+psql -h localhost -p 5433 -U postgres -d postgres -f scripts/db/bootstrap.sql
+```
+
+To simulate a logged-in user when testing RLS locally:
+```
+SET app.current_user_id = '<your-uuid>';
+```
+
+> `scripts/db/bootstrap.sql` is for fresh local instances only. Production schema changes go in `supabase/migrations/` and are applied via the Supabase dashboard.
+
+### 4. Run
+
+```bash
+npm run dev     # http://localhost:3000
+npm run lint    # ESLint
+npm run build   # Production build + type check
+```
+
+## Scripts
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start Next.js dev server (Turbopack) |
+| `npm run build` | Production build and type check |
+| `npm run lint` | ESLint (Next.js config) |
+| `node scripts/fetch-recipe-info.cjs <id>` | Fetch a single Spoonacular recipe by ID or URL |
 
 ## Branching Strategy
 
-| Branch                  | Purpose                                                                           |
-|-------------------------|-----------------------------------------------------------------------------------|
-| `main`                  | Production. Every push deploys https://kitchen-sync.org                           |
-| `<initials>/<scope>`    | Feature, fix, or spike branch (e.g., `bs/profile-avatar`, `sg/onboarding-step-3`) |
-| `<initials>/hotfix-...` | Emergency patch branched from the latest `main`                                   |
+| Branch | Purpose |
+|---|---|
+| `main` | Production — every merge deploys to [kitchen-sync.org](https://kitchen-sync.org) |
+| `<initials>/<scope>` | Feature, fix, or spike (e.g. `bs/profile-avatar`, `pj/schema-bootstrap`) |
+| `<initials>/hotfix-...` | Emergency patch branched from `main` |
 
-Guidelines:
-- Pull the latest `main` before branching: `git checkout main && git pull`
-- Name branches `<initials>/<short-description>`
-- Keep branches focused; split large efforts into multiple PRs
-- Rebase or merge `main` into your branch before requesting review (`git merge main` or `git rebase main`)
+- Always pull the latest `main` before branching: `git checkout main && git pull`
+- Keep branches focused — split large efforts into multiple PRs
+- Sync with `main` before requesting review: `git merge main` or `git rebase main`
 
-## Local Workflow
-
-1. **Create branch:** `git checkout -b bs/profile-avatar`
-2. **Run dev server:** `npm run dev`
-3. **Lint often:** `npm run lint`
-4. **Commit early/often:** `git commit -m "feat: add avatar cropper"`
-5. **Push & open PR:** `git push -u origin bs/profile-avatar`
-
-## Pull Requests & Reviews
+## Pull Requests
 
 Each PR automatically gets a Vercel preview URL. Before requesting review:
 
-- ✅ `npm run lint` (and `npm run build` if changes are sweeping)
-- ✅ Update docs if behavior changes
-- ✅ Mention required Supabase migrations in the PR body
-- ✅ Ensure the Vercel preview has finished (green check)
+- ✅ `npm run lint` passes (run `npm run build` too if changes are sweeping)
+- ✅ Docs updated if behavior changed
+- ✅ Any required Supabase migrations noted in the PR body
+- ✅ Vercel preview is green
 
 Review process:
-- Open as Draft until you’re ready for eyes
+- Open as **Draft** until ready for eyes
 - Request at least one teammate review
-- Address comments quickly; keep discussion on GitHub for traceability
-- **Merge via “Squash and merge”** unless multiple commits are intentionally distinct
+- Keep discussion on GitHub for traceability
+- **Squash and merge** unless multiple commits are intentionally distinct
 
-## Deployment Flow
+## Deployment
 
-| Action                 | Vercel Result                                |
-|------------------------|----------------------------------------------|
-| Push to feature branch | Preview deployment (auto-updates per commit) |
-| Merge PR into `main`   | Production deployment                        |
-| Revert/hotfix PR       | Production deployment after merge            |
+| Action | Result |
+|---|---|
+| Push to feature branch | Vercel preview deployment (updates per commit) |
+| Merge PR into `main` | Production deployment |
 
 ### Hotfix Protocol
 
 1. `git checkout main && git pull`
-2. `git checkout -b bs/hotfix-avatar-null`
+2. `git checkout -b <initials>/hotfix-<description>`
 3. Fix, lint, push, open PR tagged **Hotfix**
 4. Request expedited review
 5. Squash-merge, verify production, delete branch
@@ -66,39 +130,27 @@ Review process:
 
 Schema changes belong in `supabase/migrations/`.
 
-1. Generate SQL via Supabase CLI (`supabase db diff --linked`) or copy from the dashboard
-2. Commit the migration file
-3. Document the migration + rollout steps in your PR
-4. Apply the migration to the shared Supabase project before (or immediately after) merging
-5. Never rewrite existing migrations—add a new one instead
+1. Write and apply the SQL directly in the Supabase dashboard
+2. Save the same SQL as a new file: `supabase/migrations/YYYYMMDDHHMMSS_description.sql`
+3. Commit the file and describe what it changes in the PR body
+4. Never rewrite existing migration files — add a new one instead
 
-## Environment Variables
+When making significant schema changes, also update `scripts/db/bootstrap.sql` so local dev stays in sync with production.
 
-- Keep `.env.example` updated for any new variables
-- `.env.local` stays local; mirror the same keys in Vercel → Project Settings → Environment Variables
-- For avatar uploads, ensure all `S3_AVATARS_*` vars are set both locally and in Vercel
+## Environment Variable Hygiene
 
-## Preview Deployment Dry Run
+- Keep `.env.example` updated whenever you add a new variable
+- `.env.local` is gitignored — never commit it
+- Mirror all variables in Vercel → Project Settings → Environment Variables
 
-Need to verify CI without code changes?
+## Do / Don't
 
-```bash
-git checkout main && git pull
-git checkout -b bs/vercel-pipeline-check
-git commit --allow-empty -m "chore: verify vercel pipeline"
-git push -u origin bs/vercel-pipeline-check
-```
-
-Open the PR, wait for the Vercel preview check, review the preview, then squash-merge. This confirms previews/prod deploys are still wired correctly.
-
-## Do / Don’t
-
-- ✅ Keep `main` deployable and in sync with Supabase migrations
+- ✅ Keep `main` deployable at all times
 - ✅ Share the Vercel preview link in PRs for easier QA
-- ✅ Document feature flags/manual steps directly in PR descriptions
-- ❌ Don’t force-push to `main`
-- ❌ Don’t merge without at least one review (except sanctioned hotfixes)
+- ✅ Document manual steps or feature flags in the PR description
+- ❌ Don't force-push to `main`
+- ❌ Don't merge without at least one review (except sanctioned hotfixes)
 
 ## Questions?
 
-Open a GitHub Discussion/Issue or ping the team chat. When in doubt, document the answer here! 
+Open a GitHub Discussion or issue, or ping the team chat.
