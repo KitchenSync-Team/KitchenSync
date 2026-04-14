@@ -258,7 +258,7 @@ function expandNameCandidates(name: string): string[] {
   // Remove common preparation/modifier words to get a simpler core ingredient phrase.
   const simplified = collapseSpaces(
     name.replace(
-      /\b(fresh|dried|shredded|grated|minced|chopped|ground|whole|boneless|skinless|part skim|low fat|nonfat|extra virgin|halves|skinless boneless|fat free|reduced sodium|low sodium)\b/g,
+      /\b(fresh|dried|shredded|grated|minced|chopped|ground|whole|boneless|skinless|part skim|low fat|nonfat|extra virgin|halves|skinless boneless|fat free|reduced sodium|low sodium|extra lean|lean)\b/g,
       "",
     ),
   );
