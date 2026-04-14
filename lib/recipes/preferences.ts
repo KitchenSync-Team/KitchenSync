@@ -26,6 +26,7 @@ export type UserRecipeContext = {
   }[];
 };
 
+const MAX_PANTRY_ITEMS = 500;
 const MAX_PANTRY_INGREDIENTS = 30;
 
 export async function loadUserRecipeContext(userId: string): Promise<UserRecipeContext> {
@@ -46,19 +47,19 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
   const typedPrefs = (prefs ?? {}) as UserPreferencesRow;
 
   const dietaryPreferences = Array.isArray(typedPrefs.dietary_preferences)
-    ? typedPrefs.dietary_preferences.filter((value): value is string => typeof value === "string")
+    ? typedPrefs.dietary_preferences.filter((value) => Boolean(value))
     : [];
 
   const allergens = Array.isArray(typedPrefs.allergens)
-    ? typedPrefs.allergens.filter((value): value is string => typeof value === "string")
+    ? typedPrefs.allergens.filter((value) => Boolean(value))
     : [];
 
   const cuisineLikes = Array.isArray(typedPrefs.cuisine_likes)
-    ? typedPrefs.cuisine_likes.filter((value): value is string => typeof value === "string")
+    ? typedPrefs.cuisine_likes.filter((value) => Boolean(value))
     : [];
 
   const cuisineDislikesRaw = Array.isArray(typedPrefs.cuisine_dislikes)
-    ? typedPrefs.cuisine_dislikes.filter((value): value is string => typeof value === "string")
+    ? typedPrefs.cuisine_dislikes.filter((value) => Boolean(value))
     : [];
 
   const likesSet = new Set(cuisineLikes);
@@ -97,7 +98,7 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
       .select("quantity, items(name, spoonacular_ingredient_id)")
       .eq("kitchen_id", kitchenId)
       .order("created_at", { ascending: false })
-      .limit(MAX_PANTRY_INGREDIENTS);
+      .limit(MAX_PANTRY_ITEMS);
 
     if (!inventoryError && Array.isArray(inventoryRows)) {
       type PantryRow = {
@@ -134,7 +135,7 @@ export async function loadUserRecipeContext(userId: string): Promise<UserRecipeC
         });
       }
 
-      pantryItems = Array.from(byKey.values()).slice(0, MAX_PANTRY_INGREDIENTS);
+      pantryItems = Array.from(byKey.values());
       pantryIngredients = pantryItems
         .map((item) => item.name.trim())
         .filter(Boolean)
